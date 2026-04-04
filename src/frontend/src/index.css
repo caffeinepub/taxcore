@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Playfair Display";
+  src: url("/assets/fonts/PlayfairDisplay.woff2") format("woff2");
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "General Sans";
+  src: url("/assets/fonts/GeneralSans.woff2") format("woff2");
+  font-weight: 200 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    /* Linen background */
+    --background: 0.963 0.012 71.5;
+    --foreground: 0.22 0.02 30;
+    --card: 0.99 0.005 71.5;
+    --card-foreground: 0.22 0.02 30;
+    --popover: 0.99 0.005 71.5;
+    --popover-foreground: 0.22 0.02 30;
+    /* Burgundy primary */
+    --primary: 0.38 0.09 15;
+    --primary-foreground: 0.98 0.005 71.5;
+    --secondary: 0.92 0.015 71.5;
+    --secondary-foreground: 0.38 0.09 15;
+    --muted: 0.93 0.012 71.5;
+    --muted-foreground: 0.52 0.03 30;
+    /* Gold accent */
+    --accent: 0.72 0.12 78;
+    --accent-foreground: 0.22 0.02 30;
+    --destructive: 0.577 0.245 27.325;
+    --destructive-foreground: 0.985 0 0;
+    --border: 0.88 0.018 71.5;
+    --input: 0.88 0.018 71.5;
+    --ring: 0.38 0.09 15;
+    --chart-1: 0.38 0.09 15;
+    --chart-2: 0.72 0.12 78;
+    --chart-3: 0.56 0.14 150;
+    --chart-4: 0.48 0.12 230;
+    --chart-5: 0.65 0.16 45;
+    /* Sidebar - Burgundy */
+    --sidebar: 0.33 0.085 15;
+    --sidebar-foreground: 0.97 0.008 71.5;
+    --sidebar-primary: 0.72 0.12 78;
+    --sidebar-primary-foreground: 0.22 0.02 30;
+    --sidebar-accent: 0.28 0.07 15;
+    --sidebar-accent-foreground: 0.97 0.008 71.5;
+    --sidebar-border: 0.28 0.06 15;
+    --sidebar-ring: 0.72 0.12 78;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "General Sans", "Inter", system-ui, sans-serif;
+  }
+}
