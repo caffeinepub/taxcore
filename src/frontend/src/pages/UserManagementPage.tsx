@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Crown, Plus, Trash2, UserCheck } from "lucide-react";
+import { Crown, Eye, EyeOff, Plus, Trash2, UserCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { storage } from "../data/storage";
 import type { User } from "../types";
@@ -18,6 +18,8 @@ function isValidEmail(v: string): boolean {
 
 export default function UserManagementPage() {
   const [showForm, setShowForm] = useState(false);
+  const [showStaffPw, setShowStaffPw] = useState(false);
+  const [showStaffConfirmPw, setShowStaffConfirmPw] = useState(false);
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -109,15 +111,21 @@ export default function UserManagementPage() {
           data-ocid="user-management.panel"
         >
           <div className="flex items-center gap-2 mb-3">
-            <Crown className="w-4 h-4" style={{ color: "#C9A44C" }} />
-            <h3 className="font-semibold text-sm" style={{ color: "#6B1A2B" }}>
+            <Crown
+              className="w-4 h-4"
+              style={{ color: "var(--theme-gold, #C9A44C)" }}
+            />
+            <h3
+              className="font-semibold text-sm"
+              style={{ color: "var(--theme-primary, #6B1A2B)" }}
+            >
               Owner Account
             </h3>
           </div>
           <div className="flex items-center gap-4">
             <div
               className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-              style={{ background: "#6B1A2B" }}
+              style={{ background: "var(--theme-primary, #6B1A2B)" }}
             >
               {ownerUser.name[0].toUpperCase()}
             </div>
@@ -166,7 +174,10 @@ export default function UserManagementPage() {
 
       {/* Staff section header + add button */}
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-sm" style={{ color: "#6B1A2B" }}>
+        <h3
+          className="font-semibold text-sm"
+          style={{ color: "var(--theme-primary, #6B1A2B)" }}
+        >
           Staff Members ({staffUsers.length})
         </h3>
         <Button
@@ -181,7 +192,7 @@ export default function UserManagementPage() {
             setFormError("");
             setShowForm(true);
           }}
-          style={{ background: "#6B1A2B" }}
+          style={{ background: "var(--theme-primary, #6B1A2B)" }}
           className="text-white"
           data-ocid="user-management.primary_button"
         >
@@ -194,7 +205,7 @@ export default function UserManagementPage() {
         data-ocid="user-management.table"
       >
         <table className="w-full text-sm">
-          <thead style={{ background: "#6B1A2B" }}>
+          <thead style={{ background: "var(--theme-primary, #6B1A2B)" }}>
             <tr>
               {["Name", "Email", "Mobile", "Role", "Actions"].map((h) => (
                 <th
@@ -228,7 +239,7 @@ export default function UserManagementPage() {
                   <div className="flex items-center gap-2">
                     <div
                       className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                      style={{ background: "#6B1A2B" }}
+                      style={{ background: "var(--theme-primary, #6B1A2B)" }}
                     >
                       {u.name[0].toUpperCase()}
                     </div>
@@ -264,7 +275,7 @@ export default function UserManagementPage() {
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent className="max-w-sm" data-ocid="user-management.dialog">
           <DialogHeader>
-            <DialogTitle style={{ color: "#6B1A2B" }}>
+            <DialogTitle style={{ color: "var(--theme-primary, #6B1A2B)" }}>
               Add Staff User
             </DialogTitle>
           </DialogHeader>
@@ -311,27 +322,55 @@ export default function UserManagementPage() {
             </div>
             <div>
               <Label>Password *</Label>
-              <Input
-                type="password"
-                value={form.password}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, password: e.target.value }))
-                }
-                placeholder="Minimum 6 characters"
-                className="mt-1"
-              />
+              <div className="relative mt-1">
+                <Input
+                  type={showStaffPw ? "text" : "password"}
+                  value={form.password}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, password: e.target.value }))
+                  }
+                  placeholder="Minimum 6 characters"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowStaffPw((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  tabIndex={-1}
+                >
+                  {showStaffPw ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
             </div>
             <div>
               <Label>Confirm Password *</Label>
-              <Input
-                type="password"
-                value={form.confirmPassword}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, confirmPassword: e.target.value }))
-                }
-                placeholder="Re-enter password"
-                className="mt-1"
-              />
+              <div className="relative mt-1">
+                <Input
+                  type={showStaffConfirmPw ? "text" : "password"}
+                  value={form.confirmPassword}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, confirmPassword: e.target.value }))
+                  }
+                  placeholder="Re-enter password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowStaffConfirmPw((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  tabIndex={-1}
+                >
+                  {showStaffConfirmPw ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
             </div>
             {formError && (
               <p
@@ -344,7 +383,7 @@ export default function UserManagementPage() {
             <div className="flex gap-3">
               <Button
                 onClick={handleAdd}
-                style={{ background: "#6B1A2B" }}
+                style={{ background: "var(--theme-primary, #6B1A2B)" }}
                 className="text-white flex-1"
                 data-ocid="user-management.submit_button"
               >

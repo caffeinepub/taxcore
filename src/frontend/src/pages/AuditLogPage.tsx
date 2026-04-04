@@ -13,6 +13,7 @@ function exportToCSV(entries: AuditLogEntry[]) {
   const header = [
     "Time",
     "Action By",
+    "Role",
     "Client",
     "Field Changed",
     "Old Value",
@@ -21,6 +22,7 @@ function exportToCSV(entries: AuditLogEntry[]) {
   const rows = entries.map((e) => [
     new Date(e.timestamp).toLocaleString("en-IN"),
     e.userName,
+    e.userRole || "-",
     e.clientName,
     e.fieldChanged,
     e.oldValue || "-",
@@ -45,13 +47,28 @@ interface AuditLogPageProps {
 }
 
 export default function AuditLogPage({ user }: AuditLogPageProps) {
-  // Owner sees only their own audit entries; Super Admin sees all
   const isOwner = user.role === "Owner";
+
+  // Get all non-admin users so we can look up roles by userId
+  const allUsers = useMemo(() => storage.getUsers(), []);
+
+  // Owner sees their own entries + all staff entries (not Super Admin)
+  // Super Admin sees all entries
+  const filterForOwner = (logs: AuditLogEntry[]) => {
+    if (!isOwner) return logs;
+    return logs.filter((l) => {
+      // Always include owner's own entries
+      if (l.userId === user.id) return true;
+      // Include staff entries (not Super Admin)
+      const actor = allUsers.find((u) => u.id === l.userId);
+      if (actor && actor.role === "Staff") return true;
+      return false;
+    });
+  };
 
   const [allLogs, setAllLogs] = useState<AuditLogEntry[]>(() => {
     const logs = storage.getAuditLogs().slice().reverse();
-    // If Owner, show only entries created by themselves
-    return isOwner ? logs.filter((l) => l.userId === user.id) : logs;
+    return filterForOwner(logs);
   });
 
   const today = toLocalDateInputValue(new Date());
@@ -60,22 +77,33 @@ export default function AuditLogPage({ user }: AuditLogPageProps) {
   );
   const [fromDate, setFromDate] = useState(defaultFrom);
   const [toDate, setToDate] = useState(today);
-  const [staffFilter, setStaffFilter] = useState("All");
+  const [userFilter, setUserFilter] = useState("All");
 
   useEffect(() => {
     const unsub = onStorageChange(() => {
       const logs = storage.getAuditLogs().slice().reverse();
-      setAllLogs(isOwner ? logs.filter((l) => l.userId === user.id) : logs);
+      const currentUsers = storage.getUsers();
+      if (!isOwner) {
+        setAllLogs(logs);
+        return;
+      }
+      setAllLogs(
+        logs.filter((l) => {
+          if (l.userId === user.id) return true;
+          const actor = currentUsers.find((u) => u.id === l.userId);
+          return actor?.role === "Staff";
+        }),
+      );
     });
     return unsub;
+    // biome-ignore lint/correctness/useExhaustiveDependencies: stable
   }, [isOwner, user.id]);
 
-  // For non-owner (Super Admin), show staff names in filter; for Owner it's just their own entries
-  const staffNames = useMemo(() => {
-    if (isOwner) return ["All"];
+  // Build user filter list from visible logs
+  const userNames = useMemo(() => {
     const names = [...new Set(allLogs.map((l) => l.userName))];
-    return ["All", ...names];
-  }, [allLogs, isOwner]);
+    return ["All", ...names.sort()];
+  }, [allLogs]);
 
   const filteredLogs = useMemo(() => {
     return allLogs.filter((entry) => {
@@ -84,11 +112,23 @@ export default function AuditLogPage({ user }: AuditLogPageProps) {
       const to = toDate ? new Date(`${toDate}T23:59:59`) : null;
       if (from && ts < from) return false;
       if (to && ts > to) return false;
-      if (!isOwner && staffFilter !== "All" && entry.userName !== staffFilter)
-        return false;
+      if (userFilter !== "All" && entry.userName !== userFilter) return false;
       return true;
     });
-  }, [allLogs, fromDate, toDate, staffFilter, isOwner]);
+  }, [allLogs, fromDate, toDate, userFilter]);
+
+  // Determine role badge for a log entry
+  const getRoleBadge = (entry: AuditLogEntry) => {
+    if (entry.userRole) return entry.userRole;
+    const actor = allUsers.find((u) => u.id === entry.userId);
+    return actor?.role || "";
+  };
+
+  const getRoleBadgeStyle = (role: string) => {
+    if (role === "Owner") return { background: "#f3e6ec", color: "#7a1f2b" };
+    if (role === "Staff") return { background: "#e6f0fa", color: "#1a4a7a" };
+    return { background: "#f5f5f5", color: "#555" };
+  };
 
   const formatTime = (iso: string) => {
     try {
@@ -149,30 +189,28 @@ export default function AuditLogPage({ user }: AuditLogPageProps) {
           </div>
         </div>
 
-        {/* Staff filter -- only visible to Super Admin */}
-        {!isOwner && (
-          <div className="flex flex-col gap-0.5">
-            <label
-              htmlFor="audit-staff"
-              className="text-xs font-semibold text-gray-500 uppercase tracking-wide"
-            >
-              User
-            </label>
-            <select
-              id="audit-staff"
-              value={staffFilter}
-              onChange={(e) => setStaffFilter(e.target.value)}
-              className="border rounded px-2 py-1.5 text-sm text-gray-700 focus:outline-none"
-              style={{ borderColor: "#c9a44c", minWidth: 130 }}
-            >
-              {staffNames.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        {/* User filter -- Owner sees own + staff; Super Admin sees all */}
+        <div className="flex flex-col gap-0.5">
+          <label
+            htmlFor="audit-user"
+            className="text-xs font-semibold text-gray-500 uppercase tracking-wide"
+          >
+            Filter by User
+          </label>
+          <select
+            id="audit-user"
+            value={userFilter}
+            onChange={(e) => setUserFilter(e.target.value)}
+            className="border rounded px-2 py-1.5 text-sm text-gray-700 focus:outline-none"
+            style={{ borderColor: "#c9a44c", minWidth: 150 }}
+          >
+            {userNames.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* Spacer */}
         <div className="flex-1" />
@@ -274,51 +312,62 @@ export default function AuditLogPage({ user }: AuditLogPageProps) {
                 </td>
               </tr>
             )}
-            {filteredLogs.map((entry, i) => (
-              <tr
-                key={entry.id}
-                data-ocid={`audit-log.item.${i + 1}`}
-                className={`border-b last:border-0 hover:bg-gray-50 ${
-                  i % 2 === 0 ? "" : "bg-gray-50/30"
-                }`}
-              >
-                <td className="py-2.5 px-4 text-xs text-gray-500 whitespace-nowrap">
-                  {formatTime(entry.timestamp)}
-                </td>
-                <td className="py-2.5 px-4">
-                  <span className="font-medium text-gray-800">
-                    {entry.userName}
-                  </span>
-                  <span
-                    className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full"
-                    style={{ background: "#fdf3d0", color: "#92700a" }}
-                  >
-                    {entry.userId.slice(0, 6)}
-                  </span>
-                </td>
-                <td className="py-2.5 px-4">
-                  <span className="font-medium" style={{ color: "#6B1A2B" }}>
-                    {entry.clientName}
-                  </span>
-                </td>
-                <td className="py-2.5 px-4">
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                    {entry.fieldChanged}
-                  </span>
-                </td>
-                <td className="py-2.5 px-4">
-                  <span className="inline-flex items-center gap-1.5 text-xs">
-                    <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-medium">
-                      {entry.oldValue || "–"}
+            {filteredLogs.map((entry, i) => {
+              const roleBadge = getRoleBadge(entry);
+              const roleStyle = getRoleBadgeStyle(roleBadge);
+              return (
+                <tr
+                  key={entry.id}
+                  data-ocid={`audit-log.item.${i + 1}`}
+                  className={`border-b last:border-0 hover:bg-gray-50 ${
+                    i % 2 === 0 ? "" : "bg-gray-50/30"
+                  }`}
+                >
+                  <td className="py-2.5 px-4 text-xs text-gray-500 whitespace-nowrap">
+                    {formatTime(entry.timestamp)}
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-medium text-gray-800">
+                        {entry.userName}
+                      </span>
+                      {roleBadge && (
+                        <span
+                          className="text-xs px-1.5 py-0.5 rounded-full font-medium"
+                          style={roleStyle}
+                        >
+                          {roleBadge}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <span
+                      className="font-medium"
+                      style={{ color: "var(--theme-primary, #6B1A2B)" }}
+                    >
+                      {entry.clientName}
                     </span>
-                    <span className="text-gray-400">→</span>
-                    <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">
-                      {entry.newValue}
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                      {entry.fieldChanged}
                     </span>
-                  </span>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <span className="inline-flex items-center gap-1.5 text-xs">
+                      <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-medium">
+                        {entry.oldValue || "–"}
+                      </span>
+                      <span className="text-gray-400">→</span>
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">
+                        {entry.newValue}
+                      </span>
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

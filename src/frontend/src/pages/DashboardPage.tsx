@@ -516,7 +516,11 @@ export default function DashboardPage({ user }: DashboardPageProps) {
                 size="sm"
                 onClick={handleQueueWhatsAppAlerts}
                 className="flex items-center gap-1.5 text-xs font-medium flex-shrink-0"
-                style={{ background: "#C9A44C", color: "#fff", border: "none" }}
+                style={{
+                  background: "var(--theme-gold, #C9A44C)",
+                  color: "#fff",
+                  border: "none",
+                }}
                 data-ocid="dashboard.queue_whatsapp.button"
               >
                 <MessageSquare className="w-3.5 h-3.5" />

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { storage } from "../data/storage";
 import type { User } from "../types";
@@ -182,14 +183,16 @@ function FormWrapper({ children }: { children: React.ReactNode }) {
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const [view, setView] = useState<View>("login");
 
-  // Detect if we are on the admin portal URL (hash = #/admin)
-  const [isAdminPortal, setIsAdminPortal] = useState(
+  // Detect if we are on the admin portal URL (hash = #/admin) OR manual toggle
+  const [urlAdminPortal, setUrlAdminPortal] = useState(
     () => window.location.hash === "#/admin",
   );
+  const [manualAdminMode, setManualAdminMode] = useState(false);
+  const isAdminPortal = urlAdminPortal || manualAdminMode;
 
   useEffect(() => {
     function onHashChange() {
-      setIsAdminPortal(window.location.hash === "#/admin");
+      setUrlAdminPortal(window.location.hash === "#/admin");
     }
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
@@ -235,6 +238,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
   const [newPasswordError, setNewPasswordError] = useState("");
   const [resetSuccess, setResetSuccess] = useState("");
+
+  // Password visibility toggles
+  const [showLoginPw, setShowLoginPw] = useState(false);
+  const [showSaPw, setShowSaPw] = useState(false);
+  const [showSaConfirmPw, setShowSaConfirmPw] = useState(false);
+  const [showOwnerPw, setShowOwnerPw] = useState(false);
+  const [showOwnerConfirmPw, setShowOwnerConfirmPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showNewConfirmPw, setShowNewConfirmPw] = useState(false);
 
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -596,16 +608,31 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 Forgot Password?
               </button>
             </div>
-            <Input
-              id="login-password"
-              data-ocid="login.password_input"
-              type="password"
-              value={loginPassword}
-              onChange={(e) => setLoginPassword(e.target.value)}
-              placeholder="••••••••"
-              autoComplete="current-password"
-              required
-            />
+            <div className="relative">
+              <Input
+                id="login-password"
+                data-ocid="login.password_input"
+                type={showLoginPw ? "text" : "password"}
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                required
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowLoginPw((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                tabIndex={-1}
+              >
+                {showLoginPw ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
           </div>
           {loginError && (
             <div
@@ -627,26 +654,63 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         </form>
         {/* Only show signup link on owner/staff portal, not admin portal */}
         {!isAdminPortal && (
+          <div className="mt-4 text-center space-y-2">
+            <div>
+              <button
+                type="button"
+                data-ocid="owner-signup.link"
+                className="text-xs font-medium underline"
+                style={{ color: "#c9a44c" }}
+                onClick={() => {
+                  setOwnerError("");
+                  setOwnerEmailError("");
+                  setOwnerMobileError("");
+                  setOwnerName("");
+                  setOwnerFirm("");
+                  setOwnerEmail("");
+                  setOwnerMobile("");
+                  setOwnerPassword("");
+                  setOwnerConfirm("");
+                  setView("owner-signup");
+                }}
+              >
+                New firm? Create Owner Account →
+              </button>
+            </div>
+            <div>
+              <button
+                type="button"
+                data-ocid="admin-login.link"
+                className="text-xs font-medium underline"
+                style={{ color: "#7a1f2b" }}
+                onClick={() => {
+                  setLoginEmail("");
+                  setLoginPassword("");
+                  setLoginError("");
+                  setManualAdminMode(true);
+                }}
+              >
+                🛡 Administrator Login
+              </button>
+            </div>
+          </div>
+        )}
+        {/* Back to Owner Login when in manual admin mode (not URL-based) */}
+        {isAdminPortal && !urlAdminPortal && (
           <div className="mt-4 text-center">
             <button
               type="button"
-              data-ocid="owner-signup.link"
+              data-ocid="back-to-owner.link"
               className="text-xs font-medium underline"
               style={{ color: "#c9a44c" }}
               onClick={() => {
-                setOwnerError("");
-                setOwnerEmailError("");
-                setOwnerMobileError("");
-                setOwnerName("");
-                setOwnerFirm("");
-                setOwnerEmail("");
-                setOwnerMobile("");
-                setOwnerPassword("");
-                setOwnerConfirm("");
-                setView("owner-signup");
+                setLoginEmail("");
+                setLoginPassword("");
+                setLoginError("");
+                setManualAdminMode(false);
               }}
             >
-              New firm? Create Owner Account →
+              ← Back to Owner / Staff Login
             </button>
           </div>
         )}
@@ -745,17 +809,31 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             >
               Password *
             </Label>
-            <Input
-              id="sa-password"
-              data-ocid="super-admin-signup.password_input"
-              type="password"
-              value={saPassword}
-              onChange={(e) => setSaPassword(e.target.value)}
-              placeholder="Min. 6 characters"
-              autoComplete="new-password"
-              required
-              className="mt-1"
-            />
+            <div className="relative mt-1">
+              <Input
+                id="sa-password"
+                data-ocid="super-admin-signup.password_input"
+                type={showSaPw ? "text" : "password"}
+                value={saPassword}
+                onChange={(e) => setSaPassword(e.target.value)}
+                placeholder="Min. 6 characters"
+                autoComplete="new-password"
+                required
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSaPw((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                tabIndex={-1}
+              >
+                {showSaPw ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
           </div>
           <div>
             <Label
@@ -764,17 +842,31 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             >
               Confirm Password *
             </Label>
-            <Input
-              id="sa-confirm"
-              data-ocid="super-admin-signup.confirm_input"
-              type="password"
-              value={saConfirm}
-              onChange={(e) => setSaConfirm(e.target.value)}
-              placeholder="Re-enter password"
-              autoComplete="new-password"
-              required
-              className="mt-1"
-            />
+            <div className="relative mt-1">
+              <Input
+                id="sa-confirm"
+                data-ocid="super-admin-signup.confirm_input"
+                type={showSaConfirmPw ? "text" : "password"}
+                value={saConfirm}
+                onChange={(e) => setSaConfirm(e.target.value)}
+                placeholder="Re-enter password"
+                autoComplete="new-password"
+                required
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSaConfirmPw((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                tabIndex={-1}
+              >
+                {showSaConfirmPw ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
           </div>
           {saError && (
             <div
@@ -920,17 +1012,31 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             >
               Password *
             </Label>
-            <Input
-              id="ow-password"
-              data-ocid="owner-signup.password_input"
-              type="password"
-              value={ownerPassword}
-              onChange={(e) => setOwnerPassword(e.target.value)}
-              placeholder="Min. 6 characters"
-              autoComplete="new-password"
-              required
-              className="mt-1"
-            />
+            <div className="relative mt-1">
+              <Input
+                id="ow-password"
+                data-ocid="owner-signup.password_input"
+                type={showOwnerPw ? "text" : "password"}
+                value={ownerPassword}
+                onChange={(e) => setOwnerPassword(e.target.value)}
+                placeholder="Min. 6 characters"
+                autoComplete="new-password"
+                required
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowOwnerPw((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                tabIndex={-1}
+              >
+                {showOwnerPw ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
           </div>
           <div>
             <Label
@@ -939,17 +1045,31 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             >
               Confirm Password *
             </Label>
-            <Input
-              id="ow-confirm"
-              data-ocid="owner-signup.confirm_input"
-              type="password"
-              value={ownerConfirm}
-              onChange={(e) => setOwnerConfirm(e.target.value)}
-              placeholder="Re-enter password"
-              autoComplete="new-password"
-              required
-              className="mt-1"
-            />
+            <div className="relative mt-1">
+              <Input
+                id="ow-confirm"
+                data-ocid="owner-signup.confirm_input"
+                type={showOwnerConfirmPw ? "text" : "password"}
+                value={ownerConfirm}
+                onChange={(e) => setOwnerConfirm(e.target.value)}
+                placeholder="Re-enter password"
+                autoComplete="new-password"
+                required
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowOwnerConfirmPw((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                tabIndex={-1}
+              >
+                {showOwnerConfirmPw ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
           </div>
           {ownerError && (
             <div
@@ -1211,17 +1331,31 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               >
                 New Password
               </Label>
-              <Input
-                id="new-password"
-                data-ocid="new-password.input"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Min. 6 characters"
-                autoComplete="new-password"
-                required
-                className="mt-1.5"
-              />
+              <div className="relative mt-1.5">
+                <Input
+                  id="new-password"
+                  data-ocid="new-password.input"
+                  type={showNewPw ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Min. 6 characters"
+                  autoComplete="new-password"
+                  required
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPw((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  tabIndex={-1}
+                >
+                  {showNewPw ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
             </div>
             <div>
               <Label
@@ -1230,17 +1364,31 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               >
                 Confirm New Password
               </Label>
-              <Input
-                id="new-password-confirm"
-                data-ocid="new-password.confirm_input"
-                type="password"
-                value={newPasswordConfirm}
-                onChange={(e) => setNewPasswordConfirm(e.target.value)}
-                placeholder="Re-enter new password"
-                autoComplete="new-password"
-                required
-                className="mt-1.5"
-              />
+              <div className="relative mt-1.5">
+                <Input
+                  id="new-password-confirm"
+                  data-ocid="new-password.confirm_input"
+                  type={showNewConfirmPw ? "text" : "password"}
+                  value={newPasswordConfirm}
+                  onChange={(e) => setNewPasswordConfirm(e.target.value)}
+                  placeholder="Re-enter new password"
+                  autoComplete="new-password"
+                  required
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewConfirmPw((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  tabIndex={-1}
+                >
+                  {showNewConfirmPw ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
             </div>
             {newPasswordError && (
               <div

@@ -444,7 +444,7 @@ export default function ClientMasterPage({
         </div>
         <Button
           onClick={openAdd}
-          style={{ background: "#6B1A2B" }}
+          style={{ background: "var(--theme-primary, #6B1A2B)" }}
           className="text-white"
           data-ocid="clients.primary_button"
         >
@@ -458,7 +458,7 @@ export default function ClientMasterPage({
         data-ocid="clients.table"
       >
         <table className="w-full text-sm">
-          <thead style={{ background: "#6B1A2B" }}>
+          <thead style={{ background: "var(--theme-primary, #6B1A2B)" }}>
             <tr>
               {[
                 "Name",
@@ -519,7 +519,7 @@ export default function ClientMasterPage({
                       type="button"
                       onClick={() => onViewClient(client)}
                       className="hover:underline"
-                      style={{ color: "#6B1A2B" }}
+                      style={{ color: "var(--theme-primary, #6B1A2B)" }}
                     >
                       {client.name}
                     </button>
@@ -660,7 +660,7 @@ export default function ClientMasterPage({
           data-ocid="clients.dialog"
         >
           <DialogHeader>
-            <DialogTitle style={{ color: "#6B1A2B" }}>
+            <DialogTitle style={{ color: "var(--theme-primary, #6B1A2B)" }}>
               {editClient ? "Edit Client" : "Add New Client"}
             </DialogTitle>
           </DialogHeader>
@@ -816,7 +816,7 @@ export default function ClientMasterPage({
             <div className="flex gap-3 pt-2">
               <Button
                 onClick={handleSave}
-                style={{ background: "#6B1A2B" }}
+                style={{ background: "var(--theme-primary, #6B1A2B)" }}
                 className="text-white flex-1"
                 data-ocid="clients.submit_button"
               >

@@ -93,6 +93,7 @@ export interface AuditLogEntry {
   id: string;
   userId: string;
   userName: string;
+  userRole?: string; // optional for backward compat with existing entries
   action: string;
   clientId: string;
   clientName: string;
@@ -144,7 +145,7 @@ export function getHeadOfIncome(client: Client): string {
 }
 
 // Theme system
-export type ThemeKey = "burgundy" | "yellow" | "navy" | "lightgreen";
+export type ThemeKey = "burgundy" | "yellow" | "navy" | "forestgreen";
 
 export interface ThemeConfig {
   key: ThemeKey;
@@ -152,6 +153,8 @@ export interface ThemeConfig {
   primary: string;
   primaryLight: string;
   gold: string;
+  activeHighlight: string;
+  subtitle: string;
 }
 
 export const THEMES: Record<ThemeKey, ThemeConfig> = {
@@ -161,6 +164,8 @@ export const THEMES: Record<ThemeKey, ThemeConfig> = {
     primary: "#6B1A2B",
     primaryLight: "rgba(107,26,43,0.08)",
     gold: "#C9A44C",
+    activeHighlight: "rgba(255,255,255,0.15)",
+    subtitle: "rgba(255,255,255,0.5)",
   },
   yellow: {
     key: "yellow",
@@ -168,19 +173,25 @@ export const THEMES: Record<ThemeKey, ThemeConfig> = {
     primary: "#A07800",
     primaryLight: "rgba(160,120,0,0.08)",
     gold: "#C9A44C",
+    activeHighlight: "rgba(255,255,255,0.15)",
+    subtitle: "rgba(255,255,255,0.5)",
   },
   navy: {
     key: "navy",
-    label: "Navy",
-    primary: "#1E3A5F",
-    primaryLight: "rgba(30,58,95,0.08)",
-    gold: "#C9A44C",
+    label: "Navy Blue",
+    primary: "#0F2744",
+    primaryLight: "rgba(15,39,68,0.08)",
+    gold: "#4A90D9",
+    activeHighlight: "#4A90D9",
+    subtitle: "#8BB8E8",
   },
-  lightgreen: {
-    key: "lightgreen",
-    label: "Light Green",
-    primary: "#2E7D32",
-    primaryLight: "rgba(46,125,50,0.08)",
-    gold: "#C9A44C",
+  forestgreen: {
+    key: "forestgreen",
+    label: "Forest Green",
+    primary: "#1A3A22",
+    primaryLight: "rgba(26,58,34,0.08)",
+    gold: "#4CAF7D",
+    activeHighlight: "#4CAF7D",
+    subtitle: "#7ED6A8",
   },
 };

@@ -16,8 +16,9 @@ const VALID_KEYS = Object.keys(THEMES) as ThemeKey[];
 
 function resolveThemeKey(raw: string | null): ThemeKey {
   // Migrate old keys to new ones
-  if (raw === "emerald") return "lightgreen";
+  if (raw === "emerald") return "forestgreen";
   if (raw === "violet") return "yellow";
+  if (raw === "lightgreen") return "forestgreen";
   if (raw && VALID_KEYS.includes(raw as ThemeKey)) return raw as ThemeKey;
   return "burgundy";
 }
@@ -40,6 +41,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       t.primaryLight,
     );
     document.documentElement.style.setProperty("--theme-gold", t.gold);
+    document.documentElement.style.setProperty(
+      "--theme-active-highlight",
+      t.activeHighlight,
+    );
+    document.documentElement.style.setProperty("--theme-subtitle", t.subtitle);
   }, [themeKey]);
 
   const setTheme = (key: ThemeKey) => {

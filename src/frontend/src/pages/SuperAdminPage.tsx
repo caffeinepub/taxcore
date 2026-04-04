@@ -175,7 +175,11 @@ export default function SuperAdminPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "Total Firms", value: stats.total, color: "#6B1A2B" },
+          {
+            label: "Total Firms",
+            value: stats.total,
+            color: "var(--theme-primary, #6B1A2B)",
+          },
           { label: "Active", value: stats.active, color: "#16a34a" },
           { label: "Trial", value: stats.trial, color: "#d97706" },
           { label: "Full Access", value: stats.full, color: "#7c3aed" },
@@ -195,8 +199,14 @@ export default function SuperAdminPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <ShieldCheck className="w-5 h-5" style={{ color: "#6B1A2B" }} />
-          <h2 className="text-lg font-semibold" style={{ color: "#6B1A2B" }}>
+          <ShieldCheck
+            className="w-5 h-5"
+            style={{ color: "var(--theme-primary, #6B1A2B)" }}
+          />
+          <h2
+            className="text-lg font-semibold"
+            style={{ color: "var(--theme-primary, #6B1A2B)" }}
+          >
             Firm Accounts
           </h2>
         </div>
@@ -213,7 +223,7 @@ export default function SuperAdminPage() {
             setFormError("");
             setShowForm(true);
           }}
-          style={{ background: "#6B1A2B" }}
+          style={{ background: "var(--theme-primary, #6B1A2B)" }}
           className="text-white"
           data-ocid="super-admin.primary_button"
         >
@@ -236,7 +246,7 @@ export default function SuperAdminPage() {
           </div>
         ) : (
           <table className="w-full text-sm" data-ocid="super-admin.table">
-            <thead style={{ background: "#6B1A2B" }}>
+            <thead style={{ background: "var(--theme-primary, #6B1A2B)" }}>
               <tr>
                 {[
                   "Firm Name",
@@ -267,7 +277,7 @@ export default function SuperAdminPage() {
                     <div className="flex items-center gap-2">
                       <Building2
                         className="w-4 h-4 flex-shrink-0"
-                        style={{ color: "#6B1A2B" }}
+                        style={{ color: "var(--theme-primary, #6B1A2B)" }}
                       />
                       {f.firmName}
                     </div>
@@ -336,7 +346,7 @@ export default function SuperAdminPage() {
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent className="max-w-md" data-ocid="super-admin.dialog">
           <DialogHeader>
-            <DialogTitle style={{ color: "#6B1A2B" }}>
+            <DialogTitle style={{ color: "var(--theme-primary, #6B1A2B)" }}>
               Add New Firm Account
             </DialogTitle>
           </DialogHeader>
@@ -437,7 +447,7 @@ export default function SuperAdminPage() {
             <div className="flex gap-3">
               <Button
                 onClick={handleCreate}
-                style={{ background: "#6B1A2B" }}
+                style={{ background: "var(--theme-primary, #6B1A2B)" }}
                 className="text-white flex-1"
                 data-ocid="super-admin.submit_button"
               >

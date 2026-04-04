@@ -165,13 +165,16 @@ function SettingsContent({ user: _user }: SettingsPageProps) {
           className="w-10 h-10 rounded-lg flex items-center justify-center"
           style={{ background: "rgba(107,26,43,0.1)" }}
         >
-          <Settings className="w-5 h-5" style={{ color: "#6B1A2B" }} />
+          <Settings
+            className="w-5 h-5"
+            style={{ color: "var(--theme-primary, #6B1A2B)" }}
+          />
         </div>
         <div>
           <h2
             className="text-xl font-semibold"
             style={{
-              color: "#6B1A2B",
+              color: "var(--theme-primary, #6B1A2B)",
               fontFamily: "'Playfair Display', Georgia, serif",
             }}
           >
@@ -188,8 +191,14 @@ function SettingsContent({ user: _user }: SettingsPageProps) {
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5" style={{ color: "#C9A44C" }} />
-              <CardTitle className="text-base" style={{ color: "#6B1A2B" }}>
+              <MessageSquare
+                className="w-5 h-5"
+                style={{ color: "var(--theme-gold, #C9A44C)" }}
+              />
+              <CardTitle
+                className="text-base"
+                style={{ color: "var(--theme-primary, #6B1A2B)" }}
+              >
                 WhatsApp Notification Setup
               </CardTitle>
             </div>
@@ -321,7 +330,10 @@ function SettingsContent({ user: _user }: SettingsPageProps) {
             onClick={handleSaveConfig}
             disabled={isSaving}
             className="mt-2"
-            style={{ background: "#6B1A2B", color: "#fff" }}
+            style={{
+              background: "var(--theme-primary, #6B1A2B)",
+              color: "#fff",
+            }}
             data-ocid="settings.save.button"
           >
             Save Configuration
@@ -333,8 +345,14 @@ function SettingsContent({ user: _user }: SettingsPageProps) {
       <Card className="shadow-sm border" data-ocid="settings.preferences.panel">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
-            <Bell className="w-5 h-5" style={{ color: "#C9A44C" }} />
-            <CardTitle className="text-base" style={{ color: "#6B1A2B" }}>
+            <Bell
+              className="w-5 h-5"
+              style={{ color: "var(--theme-gold, #C9A44C)" }}
+            />
+            <CardTitle
+              className="text-base"
+              style={{ color: "var(--theme-primary, #6B1A2B)" }}
+            >
               Notification Triggers
             </CardTitle>
           </div>
@@ -359,7 +377,7 @@ function SettingsContent({ user: _user }: SettingsPageProps) {
               data-ocid="settings.due_date_alert.switch"
               style={{
                 // @ts-ignore
-                "--switch-checked-bg": "#6B1A2B",
+                "--switch-checked-bg": "var(--theme-primary, #6B1A2B)",
               }}
             />
           </div>
@@ -412,8 +430,14 @@ function SettingsContent({ user: _user }: SettingsPageProps) {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Bell className="w-5 h-5" style={{ color: "#C9A44C" }} />
-              <CardTitle className="text-base" style={{ color: "#6B1A2B" }}>
+              <Bell
+                className="w-5 h-5"
+                style={{ color: "var(--theme-gold, #C9A44C)" }}
+              />
+              <CardTitle
+                className="text-base"
+                style={{ color: "var(--theme-primary, #6B1A2B)" }}
+              >
                 Notification History
               </CardTitle>
             </div>

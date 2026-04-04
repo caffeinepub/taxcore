@@ -299,7 +299,7 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
 
       <div className="bg-white rounded-lg shadow-sm border overflow-x-auto">
         <table className="w-full text-sm">
-          <thead style={{ background: "#6B1A2B" }}>
+          <thead style={{ background: "var(--theme-primary, #6B1A2B)" }}>
             <tr>
               {[
                 "Client",

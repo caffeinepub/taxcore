@@ -113,7 +113,7 @@ export default function OutwardBillingPage() {
 
       <div className="bg-white rounded-lg shadow-sm border overflow-x-auto">
         <table className="w-full text-sm">
-          <thead style={{ background: "#6B1A2B" }}>
+          <thead style={{ background: "var(--theme-primary, #6B1A2B)" }}>
             <tr>
               {[
                 "Client",
@@ -209,7 +209,10 @@ export default function OutwardBillingPage() {
                       size="sm"
                       onClick={() => handleSave(client.id, billing)}
                       style={{
-                        background: saved === client.id ? "#16a34a" : "#6B1A2B",
+                        background:
+                          saved === client.id
+                            ? "#16a34a"
+                            : "var(--theme-primary, #6B1A2B)",
                       }}
                       className="text-white h-8"
                     >

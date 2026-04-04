@@ -443,7 +443,7 @@ export default function ExportPage() {
       description:
         "Dashboard summary + Client Master (head-wise grouped) + Work Processing + Document Inward + Billing + Audit Log",
       icon: FileSpreadsheet,
-      color: "#6B1A2B",
+      color: "var(--theme-primary, #6B1A2B)",
       bg: "rgba(107,26,43,0.05)",
       border: "rgba(107,26,43,0.2)",
       action: handleExportExcel,

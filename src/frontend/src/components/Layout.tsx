@@ -11,6 +11,8 @@ import {
   Briefcase,
   ClipboardList,
   Download,
+  Eye,
+  EyeOff,
   LayoutDashboard,
   LogOut,
   Pencil,
@@ -107,6 +109,9 @@ function EditProfileDialog({
   });
   const [profileError, setProfileError] = useState("");
   const [pwError, setPwError] = useState("");
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNextPw, setShowNextPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   const handleSaveProfile = () => {
     setProfileError("");
@@ -234,39 +239,81 @@ function EditProfileDialog({
             <div className="space-y-3">
               <div>
                 <Label>Current Password *</Label>
-                <Input
-                  type="password"
-                  value={pwForm.current}
-                  onChange={(e) =>
-                    setPwForm((f) => ({ ...f, current: e.target.value }))
-                  }
-                  placeholder="Current password"
-                  className="mt-1"
-                />
+                <div className="relative mt-1">
+                  <Input
+                    type={showCurrentPw ? "text" : "password"}
+                    value={pwForm.current}
+                    onChange={(e) =>
+                      setPwForm((f) => ({ ...f, current: e.target.value }))
+                    }
+                    placeholder="Current password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    tabIndex={-1}
+                  >
+                    {showCurrentPw ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
               </div>
               <div>
                 <Label>New Password *</Label>
-                <Input
-                  type="password"
-                  value={pwForm.next}
-                  onChange={(e) =>
-                    setPwForm((f) => ({ ...f, next: e.target.value }))
-                  }
-                  placeholder="Min. 6 characters"
-                  className="mt-1"
-                />
+                <div className="relative mt-1">
+                  <Input
+                    type={showNextPw ? "text" : "password"}
+                    value={pwForm.next}
+                    onChange={(e) =>
+                      setPwForm((f) => ({ ...f, next: e.target.value }))
+                    }
+                    placeholder="Min. 6 characters"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNextPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    tabIndex={-1}
+                  >
+                    {showNextPw ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
               </div>
               <div>
                 <Label>Confirm New Password *</Label>
-                <Input
-                  type="password"
-                  value={pwForm.confirm}
-                  onChange={(e) =>
-                    setPwForm((f) => ({ ...f, confirm: e.target.value }))
-                  }
-                  placeholder="Re-enter new password"
-                  className="mt-1"
-                />
+                <div className="relative mt-1">
+                  <Input
+                    type={showConfirmPw ? "text" : "password"}
+                    value={pwForm.confirm}
+                    onChange={(e) =>
+                      setPwForm((f) => ({ ...f, confirm: e.target.value }))
+                    }
+                    placeholder="Re-enter new password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPw((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    tabIndex={-1}
+                  >
+                    {showConfirmPw ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
               </div>
               {pwError && (
                 <p className="text-red-600 text-xs bg-red-50 rounded p-2">
@@ -320,7 +367,7 @@ export default function Layout({
         {/* Brand */}
         <div
           className="px-5 py-5 border-b"
-          style={{ borderColor: "rgba(255,255,255,0.12)" }}
+          style={{ borderColor: "rgba(255,255,255,0.15)" }}
         >
           <div className="flex items-center gap-3">
             <img
@@ -336,7 +383,7 @@ export default function Layout({
             />
             <div
               className="w-9 h-9 rounded-lg items-center justify-center flex-shrink-0"
-              style={{ background: "#C9A84C", display: "none" }}
+              style={{ background: theme.activeHighlight, display: "none" }}
             >
               <Shield className="w-5 h-5 text-white" />
             </div>
@@ -347,10 +394,7 @@ export default function Layout({
               >
                 TaxCore
               </div>
-              <div
-                className="text-xs"
-                style={{ color: "rgba(255,255,255,0.5)" }}
-              >
+              <div className="text-xs" style={{ color: theme.subtitle }}>
                 {isSuperAdmin ? "Administrator" : "ITR Tracker"}
               </div>
             </div>
@@ -378,19 +422,19 @@ export default function Layout({
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all"
                 data-ocid={`nav.${item.id}.link`}
                 style={{
-                  background: isActive
-                    ? "rgba(255,255,255,0.15)"
-                    : "transparent",
+                  background: isActive ? theme.activeHighlight : "transparent",
                   color: isActive ? "#fff" : "rgba(255,255,255,0.65)",
                   borderLeft: isActive
-                    ? "2px solid #C9A84C"
+                    ? "2px solid rgba(255,255,255,0.5)"
                     : "2px solid transparent",
                 }}
               >
                 <Icon
                   className="w-4 h-4 flex-shrink-0"
                   style={{
-                    color: isActive ? "#C9A84C" : "rgba(255,255,255,0.5)",
+                    color: isActive
+                      ? "rgba(255,255,255,0.9)"
+                      : "rgba(255,255,255,0.5)",
                   }}
                 />
                 {item.label}
@@ -402,7 +446,7 @@ export default function Layout({
         {/* Theme Switcher */}
         <div
           className="px-4 py-3 border-t"
-          style={{ borderColor: "rgba(255,255,255,0.12)" }}
+          style={{ borderColor: "rgba(255,255,255,0.15)" }}
         >
           <p
             className="text-xs mb-2 font-medium"
@@ -452,7 +496,7 @@ export default function Layout({
           >
             <ShieldCheck
               className="w-3 h-3 flex-shrink-0"
-              style={{ color: "#C9A84C" }}
+              style={{ color: theme.activeHighlight }}
             />
             <span>Secure Cloud \u00b7 Auto Backup</span>
           </div>
@@ -461,7 +505,7 @@ export default function Layout({
         {/* User */}
         <div
           className="px-4 py-4 border-t"
-          style={{ borderColor: "rgba(255,255,255,0.12)" }}
+          style={{ borderColor: "rgba(255,255,255,0.15)" }}
         >
           <div className="flex items-center gap-3">
             <button
@@ -469,7 +513,7 @@ export default function Layout({
               onClick={() => setShowEditProfile(true)}
               title="Edit Profile"
               className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 hover:opacity-80 transition-opacity"
-              style={{ background: "#C9A84C" }}
+              style={{ background: theme.activeHighlight }}
               data-ocid="nav.profile.button"
             >
               {initials}
