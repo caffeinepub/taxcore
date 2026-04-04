@@ -46,6 +46,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       t.activeHighlight,
     );
     document.documentElement.style.setProperty("--theme-subtitle", t.subtitle);
+    document.documentElement.style.setProperty(
+      "--theme-page-title",
+      t.pageTitleColor,
+    );
+    document.documentElement.style.setProperty("--theme-avatar-bg", t.avatarBg);
+    document.documentElement.style.setProperty(
+      "--theme-avatar-text",
+      t.avatarText,
+    );
   }, [themeKey]);
 
   const setTheme = (key: ThemeKey) => {

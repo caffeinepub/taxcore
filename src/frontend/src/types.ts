@@ -150,48 +150,94 @@ export type ThemeKey = "burgundy" | "yellow" | "navy" | "forestgreen";
 export interface ThemeConfig {
   key: ThemeKey;
   label: string;
+  /** Sidebar background color */
   primary: string;
   primaryLight: string;
+  /** Accent / link color */
   gold: string;
+  /** Active nav item background */
   activeHighlight: string;
+  /** Subtitle / inactive text under TaxCore brand */
   subtitle: string;
+  /** Logo icon circle background */
+  logoIconBg: string;
+  /** Logo icon circle text / icon color */
+  logoIconText: string;
+  /** Active nav item text color */
+  activeNavText: string;
+  /** Active nav item left-border color */
+  activeNavBorder: string;
+  /** User avatar circle background */
+  avatarBg: string;
+  /** User avatar circle text color */
+  avatarText: string;
+  /** Page title color in top nav */
+  pageTitleColor: string;
 }
 
 export const THEMES: Record<ThemeKey, ThemeConfig> = {
   burgundy: {
     key: "burgundy",
     label: "Burgundy",
-    primary: "#8B2635",
-    primaryLight: "rgba(139,38,53,0.08)",
-    gold: "#D4AF6C",
-    activeHighlight: "rgba(255,255,255,0.18)",
-    subtitle: "rgba(255,255,255,0.6)",
+    primary: "#6B1414",
+    primaryLight: "rgba(107,20,20,0.08)",
+    gold: "#C9A84C",
+    activeHighlight: "rgba(201,168,76,0.18)",
+    subtitle: "#C9A84C",
+    logoIconBg: "#C9A84C",
+    logoIconText: "#6B1414",
+    activeNavText: "#C9A84C",
+    activeNavBorder: "#C9A84C",
+    avatarBg: "#C9A84C",
+    avatarText: "#6B1414",
+    pageTitleColor: "#6B1414",
   },
   yellow: {
     key: "yellow",
-    label: "Golden Yellow",
-    primary: "#5C5210",
-    primaryLight: "rgba(92,82,16,0.08)",
-    gold: "#D4AF6C",
-    activeHighlight: "rgba(212,175,108,0.25)",
-    subtitle: "rgba(255,255,255,0.65)",
+    label: "Olive Gold",
+    primary: "#3D3D0A",
+    primaryLight: "rgba(61,61,10,0.08)",
+    gold: "#BFA84A",
+    activeHighlight: "rgba(191,168,74,0.18)",
+    subtitle: "#BFA84A",
+    logoIconBg: "#BFA84A",
+    logoIconText: "#3D3D0A",
+    activeNavText: "#BFA84A",
+    activeNavBorder: "#BFA84A",
+    avatarBg: "#BFA84A",
+    avatarText: "#3D3D0A",
+    pageTitleColor: "#3D3D0A",
   },
   navy: {
     key: "navy",
     label: "Navy Blue",
-    primary: "#1A3A5C",
-    primaryLight: "rgba(26,58,92,0.08)",
-    gold: "#5BA3E8",
-    activeHighlight: "#5BA3E8",
-    subtitle: "#A0C8F0",
+    primary: "#0D2137",
+    primaryLight: "rgba(13,33,55,0.08)",
+    gold: "#5B9BD5",
+    activeHighlight: "rgba(91,155,213,0.18)",
+    subtitle: "#8BB8E0",
+    logoIconBg: "#5B9BD5",
+    logoIconText: "#FFFFFF",
+    activeNavText: "#8BB8E0",
+    activeNavBorder: "#5B9BD5",
+    avatarBg: "#5B9BD5",
+    avatarText: "#FFFFFF",
+    pageTitleColor: "#0D2137",
   },
   forestgreen: {
     key: "forestgreen",
     label: "Forest Green",
-    primary: "#234D2D",
-    primaryLight: "rgba(35,77,45,0.08)",
-    gold: "#5BBF8A",
-    activeHighlight: "#5BBF8A",
-    subtitle: "#8EE0B5",
+    primary: "#1A3A22",
+    primaryLight: "rgba(26,58,34,0.08)",
+    gold: "#4CAF7D",
+    activeHighlight: "rgba(76,175,125,0.18)",
+    subtitle: "#7ED6A8",
+    logoIconBg: "#4CAF7D",
+    logoIconText: "#FFFFFF",
+    activeNavText: "#7ED6A8",
+    activeNavBorder: "#4CAF7D",
+    avatarBg: "#4CAF7D",
+    avatarText: "#FFFFFF",
+    pageTitleColor: "#1A3A22",
   },
 };

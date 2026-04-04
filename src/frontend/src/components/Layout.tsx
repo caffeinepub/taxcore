@@ -97,6 +97,7 @@ function EditProfileDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
+  const { theme } = useTheme();
   const [form, setForm] = useState({
     name: user.name,
     mobile: user.mobile || "",
@@ -169,7 +170,7 @@ function EditProfileDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm" data-ocid="profile.dialog">
         <DialogHeader>
-          <DialogTitle style={{ color: "var(--theme-primary, #6B1A2B)" }}>
+          <DialogTitle style={{ color: theme.primary }}>
             Edit Profile
           </DialogTitle>
         </DialogHeader>
@@ -224,7 +225,7 @@ function EditProfileDialog({
             )}
             <Button
               onClick={handleSaveProfile}
-              style={{ background: "var(--theme-primary, #6B1A2B)" }}
+              style={{ background: theme.primary }}
               className="text-white w-full"
               data-ocid="profile.save_button"
             >
@@ -367,7 +368,7 @@ export default function Layout({
         {/* Brand */}
         <div
           className="px-5 py-5 border-b"
-          style={{ borderColor: "rgba(255,255,255,0.15)" }}
+          style={{ borderColor: "rgba(255,255,255,0.12)" }}
         >
           <div className="flex items-center gap-3">
             <img
@@ -381,11 +382,18 @@ export default function Layout({
                 if (fallback) fallback.style.display = "flex";
               }}
             />
+            {/* Fallback logo icon — shown only when image fails */}
             <div
               className="w-9 h-9 rounded-lg items-center justify-center flex-shrink-0"
-              style={{ background: theme.activeHighlight, display: "none" }}
+              style={{
+                background: theme.logoIconBg,
+                display: "none",
+              }}
             >
-              <Shield className="w-5 h-5 text-white" />
+              <Shield
+                className="w-5 h-5"
+                style={{ color: theme.logoIconText }}
+              />
             </div>
             <div>
               <div
@@ -423,18 +431,20 @@ export default function Layout({
                 data-ocid={`nav.${item.id}.link`}
                 style={{
                   background: isActive ? theme.activeHighlight : "transparent",
-                  color: isActive ? "#fff" : "rgba(255,255,255,0.65)",
+                  color: isActive
+                    ? theme.activeNavText
+                    : "rgba(255,255,255,0.55)",
                   borderLeft: isActive
-                    ? "2px solid rgba(255,255,255,0.5)"
-                    : "2px solid transparent",
+                    ? `3px solid ${theme.activeNavBorder}`
+                    : "3px solid transparent",
                 }}
               >
                 <Icon
                   className="w-4 h-4 flex-shrink-0"
                   style={{
                     color: isActive
-                      ? "rgba(255,255,255,0.9)"
-                      : "rgba(255,255,255,0.5)",
+                      ? theme.activeNavText
+                      : "rgba(255,255,255,0.45)",
                   }}
                 />
                 {item.label}
@@ -446,7 +456,7 @@ export default function Layout({
         {/* Theme Switcher */}
         <div
           className="px-4 py-3 border-t"
-          style={{ borderColor: "rgba(255,255,255,0.15)" }}
+          style={{ borderColor: "rgba(255,255,255,0.12)" }}
         >
           <p
             className="text-xs mb-2 font-medium"
@@ -479,7 +489,7 @@ export default function Layout({
           </div>
           <p
             className="text-xs mt-1"
-            style={{ color: "rgba(255,255,255,0.3)" }}
+            style={{ color: "rgba(255,255,255,0.35)" }}
           >
             {THEMES[theme.key].label}
           </p>
@@ -490,30 +500,33 @@ export default function Layout({
           <div
             className="flex items-center gap-1.5 px-2 py-1 rounded text-xs"
             style={{
-              background: "rgba(255,255,255,0.08)",
-              color: "rgba(255,255,255,0.5)",
+              background: "rgba(255,255,255,0.07)",
+              color: "rgba(255,255,255,0.45)",
             }}
           >
             <ShieldCheck
               className="w-3 h-3 flex-shrink-0"
-              style={{ color: theme.activeHighlight }}
+              style={{ color: theme.gold }}
             />
-            <span>Secure Cloud \u00b7 Auto Backup</span>
+            <span>Secure Cloud &middot; Auto Backup</span>
           </div>
         </div>
 
-        {/* User */}
+        {/* User row */}
         <div
           className="px-4 py-4 border-t"
-          style={{ borderColor: "rgba(255,255,255,0.15)" }}
+          style={{ borderColor: "rgba(255,255,255,0.1)" }}
         >
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setShowEditProfile(true)}
               title="Edit Profile"
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 hover:opacity-80 transition-opacity"
-              style={{ background: theme.activeHighlight }}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 hover:opacity-80 transition-opacity"
+              style={{
+                background: theme.avatarBg,
+                color: theme.avatarText,
+              }}
               data-ocid="nav.profile.button"
             >
               {initials}
@@ -546,23 +559,28 @@ export default function Layout({
         </div>
       </aside>
 
-      {/* Main */}
+      {/* Main content area */}
       <div
         className="flex-1 flex flex-col overflow-hidden"
-        style={{ background: "#FAF7F2" }}
+        style={{ background: "#F5F3EE" }}
       >
-        <header className="bg-white border-b px-6 py-4 flex items-center justify-between flex-shrink-0 shadow-sm">
+        {/* Top nav bar */}
+        <header
+          className="bg-white px-6 py-4 flex items-center justify-between flex-shrink-0"
+          style={{ borderBottom: "1px solid #EDE8DC" }}
+        >
           <div>
             <h1
-              className="text-xl font-semibold"
+              className="text-xl"
               style={{
-                color: "var(--theme-primary, #6B1A2B)",
+                color: theme.pageTitleColor,
+                fontWeight: 600,
                 fontFamily: "'Playfair Display', Georgia, serif",
               }}
             >
               {pageTitles[currentPage]}
             </h1>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-xs mt-0.5" style={{ color: "#AAA" }}>
               TaxCore &rsaquo; {pageTitles[currentPage]}
             </p>
           </div>
@@ -579,7 +597,10 @@ export default function Layout({
 
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
 
-        <footer className="bg-white border-t px-6 py-2 flex items-center justify-end">
+        <footer
+          className="bg-white border-t px-6 py-2 flex items-center justify-end"
+          style={{ borderColor: "#EDE8DC" }}
+        >
           <p className="text-xs text-gray-400">
             &copy; {new Date().getFullYear()} TaxCore &mdash; A complete
             workflow tool for tax professionals
