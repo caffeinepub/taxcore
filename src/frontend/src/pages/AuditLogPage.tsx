@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { onStorageChange, storage } from "../data/storage";
-import type { AuditLogEntry } from "../types";
+import type { AuditLogEntry, User } from "../types";
 
 function toLocalDateInputValue(date: Date): string {
   const y = date.getFullYear();
@@ -12,7 +12,7 @@ function toLocalDateInputValue(date: Date): string {
 function exportToCSV(entries: AuditLogEntry[]) {
   const header = [
     "Time",
-    "Staff",
+    "Action By",
     "Client",
     "Field Changed",
     "Old Value",
@@ -40,10 +40,19 @@ function exportToCSV(entries: AuditLogEntry[]) {
   URL.revokeObjectURL(url);
 }
 
-export default function AuditLogPage() {
-  const [allLogs, setAllLogs] = useState<AuditLogEntry[]>(() =>
-    storage.getAuditLogs().slice().reverse(),
-  );
+interface AuditLogPageProps {
+  user: User;
+}
+
+export default function AuditLogPage({ user }: AuditLogPageProps) {
+  // Owner sees only their own audit entries; Super Admin sees all
+  const isOwner = user.role === "Owner";
+
+  const [allLogs, setAllLogs] = useState<AuditLogEntry[]>(() => {
+    const logs = storage.getAuditLogs().slice().reverse();
+    // If Owner, show only entries created by themselves
+    return isOwner ? logs.filter((l) => l.userId === user.id) : logs;
+  });
 
   const today = toLocalDateInputValue(new Date());
   const defaultFrom = toLocalDateInputValue(
@@ -55,15 +64,18 @@ export default function AuditLogPage() {
 
   useEffect(() => {
     const unsub = onStorageChange(() => {
-      setAllLogs(storage.getAuditLogs().slice().reverse());
+      const logs = storage.getAuditLogs().slice().reverse();
+      setAllLogs(isOwner ? logs.filter((l) => l.userId === user.id) : logs);
     });
     return unsub;
-  }, []);
+  }, [isOwner, user.id]);
 
+  // For non-owner (Super Admin), show staff names in filter; for Owner it's just their own entries
   const staffNames = useMemo(() => {
+    if (isOwner) return ["All"];
     const names = [...new Set(allLogs.map((l) => l.userName))];
     return ["All", ...names];
-  }, [allLogs]);
+  }, [allLogs, isOwner]);
 
   const filteredLogs = useMemo(() => {
     return allLogs.filter((entry) => {
@@ -72,10 +84,11 @@ export default function AuditLogPage() {
       const to = toDate ? new Date(`${toDate}T23:59:59`) : null;
       if (from && ts < from) return false;
       if (to && ts > to) return false;
-      if (staffFilter !== "All" && entry.userName !== staffFilter) return false;
+      if (!isOwner && staffFilter !== "All" && entry.userName !== staffFilter)
+        return false;
       return true;
     });
-  }, [allLogs, fromDate, toDate, staffFilter]);
+  }, [allLogs, fromDate, toDate, staffFilter, isOwner]);
 
   const formatTime = (iso: string) => {
     try {
@@ -136,28 +149,30 @@ export default function AuditLogPage() {
           </div>
         </div>
 
-        {/* Staff filter */}
-        <div className="flex flex-col gap-0.5">
-          <label
-            htmlFor="audit-staff"
-            className="text-xs font-semibold text-gray-500 uppercase tracking-wide"
-          >
-            Staff
-          </label>
-          <select
-            id="audit-staff"
-            value={staffFilter}
-            onChange={(e) => setStaffFilter(e.target.value)}
-            className="border rounded px-2 py-1.5 text-sm text-gray-700 focus:outline-none"
-            style={{ borderColor: "#c9a44c", minWidth: 130 }}
-          >
-            {staffNames.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Staff filter -- only visible to Super Admin */}
+        {!isOwner && (
+          <div className="flex flex-col gap-0.5">
+            <label
+              htmlFor="audit-staff"
+              className="text-xs font-semibold text-gray-500 uppercase tracking-wide"
+            >
+              User
+            </label>
+            <select
+              id="audit-staff"
+              value={staffFilter}
+              onChange={(e) => setStaffFilter(e.target.value)}
+              className="border rounded px-2 py-1.5 text-sm text-gray-700 focus:outline-none"
+              style={{ borderColor: "#c9a44c", minWidth: 130 }}
+            >
+              {staffNames.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Spacer */}
         <div className="flex-1" />
@@ -227,7 +242,7 @@ export default function AuditLogPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b">
-              {["Time", "Staff", "Client", "Field Changed", "Change"].map(
+              {["Time", "Action By", "Client", "Field Changed", "Change"].map(
                 (h) => (
                   <th
                     key={h}

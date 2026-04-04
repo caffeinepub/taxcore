@@ -77,11 +77,6 @@ export default function App() {
     if (page !== "client-detail") setSelectedClient(null);
   };
 
-  const handleViewClient = (client: Client) => {
-    setSelectedClient(client);
-    setCurrentPage("client-detail");
-  };
-
   if (!user) {
     return (
       <ThemeProvider>
@@ -137,7 +132,7 @@ export default function App() {
       case "export":
         return <ExportPage />;
       case "audit-log":
-        return <AuditLogPage />;
+        return <AuditLogPage user={user} />;
       case "settings":
         return user.role === "Owner" ? (
           <SettingsPage user={user} />
@@ -149,6 +144,11 @@ export default function App() {
       default:
         return <DashboardPage user={user} />;
     }
+  };
+
+  const handleViewClient = (client: Client) => {
+    setSelectedClient(client);
+    setCurrentPage("client-detail");
   };
 
   return (

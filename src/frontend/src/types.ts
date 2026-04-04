@@ -144,7 +144,7 @@ export function getHeadOfIncome(client: Client): string {
 }
 
 // Theme system
-export type ThemeKey = "burgundy" | "emerald" | "navy" | "violet";
+export type ThemeKey = "burgundy" | "yellow" | "navy" | "lightgreen";
 
 export interface ThemeConfig {
   key: ThemeKey;
@@ -162,11 +162,11 @@ export const THEMES: Record<ThemeKey, ThemeConfig> = {
     primaryLight: "rgba(107,26,43,0.08)",
     gold: "#C9A44C",
   },
-  emerald: {
-    key: "emerald",
-    label: "Emerald",
-    primary: "#065F46",
-    primaryLight: "rgba(6,95,70,0.08)",
+  yellow: {
+    key: "yellow",
+    label: "Golden Yellow",
+    primary: "#A07800",
+    primaryLight: "rgba(160,120,0,0.08)",
     gold: "#C9A44C",
   },
   navy: {
@@ -176,11 +176,11 @@ export const THEMES: Record<ThemeKey, ThemeConfig> = {
     primaryLight: "rgba(30,58,95,0.08)",
     gold: "#C9A44C",
   },
-  violet: {
-    key: "violet",
-    label: "Violet",
-    primary: "#4C1D95",
-    primaryLight: "rgba(76,29,149,0.08)",
+  lightgreen: {
+    key: "lightgreen",
+    label: "Light Green",
+    primary: "#2E7D32",
+    primaryLight: "rgba(46,125,50,0.08)",
     gold: "#C9A44C",
   },
 };

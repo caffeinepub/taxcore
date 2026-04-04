@@ -12,6 +12,16 @@ interface ThemeContextType {
   setTheme: (key: ThemeKey) => void;
 }
 
+const VALID_KEYS = Object.keys(THEMES) as ThemeKey[];
+
+function resolveThemeKey(raw: string | null): ThemeKey {
+  // Migrate old keys to new ones
+  if (raw === "emerald") return "lightgreen";
+  if (raw === "violet") return "yellow";
+  if (raw && VALID_KEYS.includes(raw as ThemeKey)) return raw as ThemeKey;
+  return "burgundy";
+}
+
 const ThemeContext = createContext<ThemeContextType>({
   theme: THEMES.burgundy,
   setTheme: () => {},
@@ -19,7 +29,7 @@ const ThemeContext = createContext<ThemeContextType>({
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themeKey, setThemeKey] = useState<ThemeKey>(() => {
-    return (localStorage.getItem("taxcore_theme") as ThemeKey) || "burgundy";
+    return resolveThemeKey(localStorage.getItem("taxcore_theme"));
   });
 
   useEffect(() => {
