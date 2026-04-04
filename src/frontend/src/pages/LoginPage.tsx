@@ -615,7 +615,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 type={showLoginPw ? "text" : "password"}
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="Enter password"
                 autoComplete="current-password"
                 required
                 className="pr-10"
