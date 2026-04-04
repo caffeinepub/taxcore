@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import Layout from "./components/Layout";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import { seedData, storage } from "./data/storage";
 import type { Client, Page, User } from "./types";
 
@@ -30,8 +31,6 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
-  // Track whether we've set the initial page for the current user session
-  // so we don't reset page on every re-render while the user is navigating.
   const initialPageSet = useRef(false);
 
   useEffect(() => {
@@ -47,7 +46,6 @@ export default function App() {
     } else if (user.role === "Staff") {
       setCurrentPage("clients");
     } else {
-      // Owner
       setCurrentPage("dashboard");
       seedData();
     }
@@ -55,8 +53,7 @@ export default function App() {
 
   const handleLogin = (u: User) => {
     setUser(u);
-    // handleLogin already fires before the useEffect, set a sensible immediate page
-    initialPageSet.current = false; // allow the effect to run for the new user
+    initialPageSet.current = false;
   };
 
   const handleLogout = () => {
@@ -87,17 +84,16 @@ export default function App() {
 
   if (!user) {
     return (
-      <>
+      <ThemeProvider>
         <Suspense fallback={<PageFallback />}>
           <LoginPage onLogin={handleLogin} />
         </Suspense>
         <Toaster richColors position="top-right" />
-      </>
+      </ThemeProvider>
     );
   }
 
   const renderPage = () => {
-    // Super Admin only sees their panel
     if (user.role === "Super Admin") {
       return <SuperAdminPage />;
     }
@@ -156,7 +152,7 @@ export default function App() {
   };
 
   return (
-    <>
+    <ThemeProvider>
       <Layout
         currentPage={currentPage}
         onNavigate={handleNavigate}
@@ -166,6 +162,6 @@ export default function App() {
         <Suspense fallback={<PageFallback />}>{renderPage()}</Suspense>
       </Layout>
       <Toaster richColors position="top-right" />
-    </>
+    </ThemeProvider>
   );
 }

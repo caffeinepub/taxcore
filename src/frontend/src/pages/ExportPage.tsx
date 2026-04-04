@@ -1,10 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Download, FileSpreadsheet } from "lucide-react";
 import { storage } from "../data/storage";
-
-// We use a lightweight xlsx-like approach using the pre-bundled xlsx library
-// Since xlsx is available as a CDN approach, we build structured CSV with multiple sections
-// For full xlsx support, we create a proper multi-sheet workbook
+import { getHeadOfIncome } from "../types";
 
 function escapeCell(val: unknown): string {
   const str = val == null ? "" : String(val);
@@ -43,26 +40,23 @@ export default function ExportPage() {
     const billing = storage.getBilling();
     const auditLogs = storage.getAuditLogs();
 
-    // Helper to get head of income from client
     const getHOI = (c: (typeof clients)[0]) => {
-      if (c.headOfIncome) return c.headOfIncome;
-      const legacy = (c as any).sourceOfIncome;
-      if (legacy === "Salary") return "Salaried";
-      if (legacy === "Other") return "Salaried";
-      return legacy || "Salaried";
+      return getHeadOfIncome(c as any);
     };
 
     // === DASHBOARD SUMMARY ===
-    const totalClients = clients.length;
-    const allWork = work;
-    const filedCount = allWork.filter((w) => w.status === "Filed").length;
-    const pendingCount = allWork.filter(
+    const filedCount = work.filter(
+      (w) =>
+        w.filingStatus === "E-Verified" ||
+        w.filingStatus === "Pending for E-verification",
+    ).length;
+    const pendingCount = work.filter(
       (w) => w.status === "Pending" || w.status === "In Progress",
     ).length;
-    const eVerifiedCount = allWork.filter(
+    const eVerifiedCount = work.filter(
       (w) => w.eVerified || w.filingStatus === "E-Verified",
     ).length;
-    const pendingEVerif = allWork.filter(
+    const pendingEVerif = work.filter(
       (w) => w.filingStatus === "Pending for E-verification",
     ).length;
     const readyForDelivery = billing.filter(
@@ -73,9 +67,9 @@ export default function ExportPage() {
     const totalBalance = billing.reduce((s, b) => s + b.balance, 0);
 
     const dashboardRows = [
-      { Metric: "Total Clients", Value: totalClients },
+      { Metric: "Total Clients", Value: clients.length },
       { Metric: "Work Pending / In Progress", Value: pendingCount },
-      { Metric: "ITR Filed", Value: filedCount },
+      { Metric: "ITR Filed (E-Verified + Pending E-verif)", Value: filedCount },
       { Metric: "E-Verified", Value: eVerifiedCount },
       { Metric: "Pending for E-verification", Value: pendingEVerif },
       { Metric: "Ready for Delivery", Value: readyForDelivery },
@@ -85,10 +79,7 @@ export default function ExportPage() {
       { Metric: "Total Received (\u20b9)", Value: totalReceived },
       { Metric: "Total Balance (\u20b9)", Value: totalBalance },
       { Metric: "", Value: "" },
-      {
-        Metric: "Generated On",
-        Value: new Date().toLocaleString("en-IN"),
-      },
+      { Metric: "Generated On", Value: new Date().toLocaleString("en-IN") },
     ];
 
     // === CLIENT MASTER ===
@@ -119,6 +110,19 @@ export default function ExportPage() {
       "Created At": new Date(c.createdAt).toLocaleDateString("en-IN"),
     }));
 
+    // Head-of-income grouped sections
+    const hoiGroups: Record<string, typeof clientRows> = {
+      Salaried: [],
+      Business: [],
+      Agricultural: [],
+      "Capital Gain": [],
+    };
+    for (const row of clientRows) {
+      const hoi = row["Head of Income"];
+      if (hoiGroups[hoi]) hoiGroups[hoi].push(row);
+      else hoiGroups.Salaried.push(row);
+    }
+
     // === WORK PROCESSING ===
     const workHeaders = [
       "Client Name",
@@ -126,9 +130,11 @@ export default function ExportPage() {
       "Tax Year",
       "Work Status",
       "ITR Form",
+      "Return Type",
       "Acknowledgement Number",
       "Filing Date",
       "Filing Status",
+      "Remark",
     ];
     const workRows = work.map((w) => {
       const client = clients.find((c) => c.id === w.clientId);
@@ -139,9 +145,11 @@ export default function ExportPage() {
         "Tax Year": w.taxYear,
         "Work Status": w.status,
         "ITR Form": w.itrForm || "-",
+        "Return Type": w.returnType || "Original",
         "Acknowledgement Number": w.ackNumber || "-",
         "Filing Date": w.filingDate || "-",
         "Filing Status": fs,
+        Remark: w.remark || "-",
       };
     });
 
@@ -209,75 +217,152 @@ export default function ExportPage() {
       "New Value": a.newValue,
     }));
 
-    // Build multi-section CSV (one file, tabs separated by section headers)
-    const sections = [
-      {
-        title: "TAXCORE EXPORT REPORT",
-        subtitle: `Generated: ${new Date().toLocaleString("en-IN")}`,
-        isSummary: true,
-      },
-      {
-        title: "=== 1. DASHBOARD SUMMARY ===",
-        headers: ["Metric", "Value"],
-        rows: dashboardRows as Record<string, unknown>[],
-      },
-      {
-        title: "=== 2. CLIENT MASTER ===",
-        headers: clientHeaders,
-        rows: clientRows as Record<string, unknown>[],
-      },
-      {
-        title: "=== 3. WORK PROCESSING ===",
-        headers: workHeaders,
-        rows: workRows as Record<string, unknown>[],
-      },
-      {
-        title: "=== 4. DOCUMENT INWARD ===",
-        headers: docHeaders,
-        rows: docRows as Record<string, unknown>[],
-      },
-      {
-        title: "=== 5. OUTWARD & BILLING ===",
-        headers: billingHeaders,
-        rows: billingRows as Record<string, unknown>[],
-      },
-      {
-        title: "=== 6. AUDIT LOG ===",
-        headers: auditHeaders,
-        rows: auditRows as Record<string, unknown>[],
-      },
-    ];
-
     const lines: string[] = [
       "TAXCORE ITR WORKFLOW MANAGEMENT SYSTEM",
       `Export Date: ${new Date().toLocaleString("en-IN")}`,
       "",
+      "=== 1. DASHBOARD SUMMARY ===",
+      toCsvRows(
+        ["Metric", "Value"],
+        dashboardRows as Record<string, unknown>[],
+      ),
+      "",
+      "",
+      "=== 2. CLIENT MASTER (ALL) ===",
+      toCsvRows(clientHeaders, clientRows as Record<string, unknown>[]),
+      "",
+      "",
+      "=== 2A. CLIENT MASTER: SALARIED ===",
+      toCsvRows(clientHeaders, hoiGroups.Salaried as Record<string, unknown>[]),
+      "",
+      "",
+      "=== 2B. CLIENT MASTER: BUSINESS ===",
+      toCsvRows(clientHeaders, hoiGroups.Business as Record<string, unknown>[]),
+      "",
+      "",
+      "=== 2C. CLIENT MASTER: AGRICULTURAL ===",
+      toCsvRows(
+        clientHeaders,
+        hoiGroups.Agricultural as Record<string, unknown>[],
+      ),
+      "",
+      "",
+      "=== 2D. CLIENT MASTER: CAPITAL GAIN ===",
+      toCsvRows(
+        clientHeaders,
+        hoiGroups["Capital Gain"] as Record<string, unknown>[],
+      ),
+      "",
+      "",
+      "=== 3. WORK PROCESSING ===",
+      toCsvRows(workHeaders, workRows as Record<string, unknown>[]),
+      "",
+      "",
+      "=== 4. DOCUMENT INWARD ===",
+      toCsvRows(docHeaders, docRows as Record<string, unknown>[]),
+      "",
+      "",
+      "=== 5. OUTWARD & BILLING ===",
+      toCsvRows(billingHeaders, billingRows as Record<string, unknown>[]),
+      "",
+      "",
+      "=== 6. AUDIT LOG ===",
+      toCsvRows(auditHeaders, auditRows as Record<string, unknown>[]),
     ];
-
-    for (const section of sections) {
-      if ((section as any).isSummary) continue;
-      lines.push((section as any).title);
-      lines.push(toCsvRows((section as any).headers, (section as any).rows));
-      lines.push("");
-      lines.push("");
-    }
 
     downloadBlob(
       lines.join("\r\n"),
-      `TaxCore_Export_${getDateStr()}.csv`,
+      `TaxCore_FullExport_${getDateStr()}.csv`,
+      "text/csv",
+    );
+  };
+
+  const handleExportITRFiled = () => {
+    const clients = storage.getClients();
+    const work = storage.getWork();
+
+    const filedWork = work.filter(
+      (w) =>
+        w.filingStatus === "E-Verified" ||
+        w.filingStatus === "Pending for E-verification",
+    );
+
+    const headers = [
+      "Client Name",
+      "PAN",
+      "Tax Year",
+      "ITR Form",
+      "Return Type",
+      "Acknowledgement Number",
+      "Filing Date",
+      "Filing Status",
+      "Remark",
+    ];
+    const rows = filedWork.map((w) => {
+      const client = clients.find((c) => c.id === w.clientId);
+      return {
+        "Client Name": client?.name || "-",
+        PAN: client?.pan || "-",
+        "Tax Year": w.taxYear,
+        "ITR Form": w.itrForm || "-",
+        "Return Type": w.returnType || "Original",
+        "Acknowledgement Number": w.ackNumber || "-",
+        "Filing Date": w.filingDate || "-",
+        "Filing Status": w.filingStatus || "-",
+        Remark: w.remark || "-",
+      };
+    }) as Record<string, unknown>[];
+
+    downloadBlob(
+      toCsvRows(headers, rows),
+      `TaxCore_ITRFiled_${getDateStr()}.csv`,
+      "text/csv",
+    );
+  };
+
+  const handleExportPendingWork = () => {
+    const clients = storage.getClients();
+    const work = storage.getWork();
+
+    const pendingWork = work.filter(
+      (w) => w.status === "Pending" || w.status === "In Progress",
+    );
+
+    const headers = [
+      "Client Name",
+      "PAN",
+      "Tax Year",
+      "Head of Income",
+      "Due Date",
+      "Work Status",
+      "ITR Form",
+      "Return Type",
+      "Remark",
+    ];
+    const rows = pendingWork.map((w) => {
+      const client = clients.find((c) => c.id === w.clientId);
+      return {
+        "Client Name": client?.name || "-",
+        PAN: client?.pan || "-",
+        "Tax Year": w.taxYear,
+        "Head of Income": client ? getHeadOfIncome(client as any) : "-",
+        "Due Date": client?.dueDate || "-",
+        "Work Status": w.status,
+        "ITR Form": w.itrForm || "-",
+        "Return Type": w.returnType || "Original",
+        Remark: w.remark || "-",
+      };
+    }) as Record<string, unknown>[];
+
+    downloadBlob(
+      toCsvRows(headers, rows),
+      `TaxCore_PendingWork_${getDateStr()}.csv`,
       "text/csv",
     );
   };
 
   const handleExportClients = () => {
     const clients = storage.getClients();
-    const getHOI = (c: (typeof clients)[0]) => {
-      if (c.headOfIncome) return c.headOfIncome;
-      const legacy = (c as any).sourceOfIncome;
-      if (legacy === "Salary") return "Salaried";
-      return legacy || "Salaried";
-    };
-
     const headers = [
       "Name",
       "PAN",
@@ -292,7 +377,7 @@ export default function ExportPage() {
     const rows = clients.map((c) => ({
       Name: c.name,
       PAN: c.pan,
-      "Head of Income": getHOI(c),
+      "Head of Income": getHeadOfIncome(c as any),
       "Business Name": c.businessName || "-",
       Category: c.clientCategory,
       "Tax Year": c.taxYear,
@@ -334,12 +419,21 @@ export default function ExportPage() {
     );
   };
 
+  const work = storage.getWork();
   const stats = {
     clients: storage.getClients().length,
-    work: storage.getWork().length,
+    work: work.length,
     docs: storage.getDocuments().length,
     billing: storage.getBilling().length,
     audit: storage.getAuditLogs().length,
+    itrFiled: work.filter(
+      (w) =>
+        w.filingStatus === "E-Verified" ||
+        w.filingStatus === "Pending for E-verification",
+    ).length,
+    pendingWork: work.filter(
+      (w) => w.status === "Pending" || w.status === "In Progress",
+    ).length,
   };
 
   const exportOptions = [
@@ -347,7 +441,7 @@ export default function ExportPage() {
       id: "full",
       title: "Full Export (All Data)",
       description:
-        "Dashboard summary + Client Master + Work Processing + Document Inward + Billing + Audit Log",
+        "Dashboard summary + Client Master (head-wise grouped) + Work Processing + Document Inward + Billing + Audit Log",
       icon: FileSpreadsheet,
       color: "#6B1A2B",
       bg: "rgba(107,26,43,0.05)",
@@ -355,6 +449,32 @@ export default function ExportPage() {
       action: handleExportExcel,
       label: "Export All to CSV",
       badge: `${stats.clients + stats.work + stats.docs + stats.billing} records`,
+    },
+    {
+      id: "itr-filed",
+      title: "ITR Filed Report",
+      description:
+        "Clients with E-Verified or Pending for E-verification status — with ITR form, return type, ack number",
+      icon: Download,
+      color: "#16A34A",
+      bg: "rgba(22,163,74,0.05)",
+      border: "rgba(22,163,74,0.2)",
+      action: handleExportITRFiled,
+      label: "Export ITR Filed",
+      badge: `${stats.itrFiled} filed`,
+    },
+    {
+      id: "pending-work",
+      title: "Pending Work Report",
+      description:
+        "Clients with Pending or In Progress work status — with due date, head of income, ITR form",
+      icon: Download,
+      color: "#D97706",
+      bg: "rgba(217,119,6,0.05)",
+      border: "rgba(217,119,6,0.2)",
+      action: handleExportPendingWork,
+      label: "Export Pending Work",
+      badge: `${stats.pendingWork} pending`,
     },
     {
       id: "clients",
@@ -387,12 +507,15 @@ export default function ExportPage() {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h2 className="text-lg font-semibold mb-1" style={{ color: "#6B1A2B" }}>
+        <h2
+          className="text-lg font-semibold mb-1"
+          style={{ color: "var(--theme-primary, #6B1A2B)" }}
+        >
           Export Data
         </h2>
         <p className="text-sm text-gray-500">
-          Download your TaxCore data as CSV files. Each export includes all
-          records in structured format.
+          Download your TaxCore data as CSV files. Full export includes
+          head-of-income grouped sheets.
         </p>
       </div>
 
@@ -423,10 +546,7 @@ export default function ExportPage() {
                     </p>
                     <span
                       className="text-xs px-1.5 py-0.5 rounded-full font-medium"
-                      style={{
-                        background: `${opt.color}18`,
-                        color: opt.color,
-                      }}
+                      style={{ background: `${opt.color}18`, color: opt.color }}
                     >
                       {opt.badge}
                     </span>
@@ -457,16 +577,12 @@ export default function ExportPage() {
       >
         <p className="font-medium text-gray-700 mb-1">Export Notes:</p>
         <ul className="space-y-0.5 list-disc list-inside">
+          <li>Files download as CSV (opens in Excel, Google Sheets)</li>
           <li>
-            Files are downloaded as CSV format (opens in Excel, Google Sheets)
+            Full export groups Client Master by Head of Income in separate
+            sections
           </li>
-          <li>
-            Full export contains all sections in a single file with clear
-            section headers
-          </li>
-          <li>
-            Data is exported as currently stored \u2014 no data is modified
-          </li>
+          <li>ITR Filed = E-Verified + Pending for E-verification</li>
           <li>File name includes today\u2019s date for easy reference</li>
         </ul>
       </div>

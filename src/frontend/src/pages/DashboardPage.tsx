@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
+  FileText,
   MessageSquare,
   ShieldAlert,
   Truck,
@@ -74,7 +75,6 @@ function computeStats(taxYear: string) {
   const work = allWork.filter((w) => clientIds.has(w.clientId));
   const billing = allBilling.filter((b) => clientIds.has(b.clientId));
 
-  // Show last 10 recent clients for more impact
   const recentClients = allClients.slice(-10).reverse();
 
   return {
@@ -82,7 +82,12 @@ function computeStats(taxYear: string) {
     pending: work.filter(
       (w) => w.status === "Pending" || w.status === "In Progress",
     ).length,
-    filed: work.filter((w) => w.status === "Filed").length,
+    // ITR Filed = E-Verified + Pending for E-verification (return has been filed)
+    itrFiled: work.filter(
+      (w) =>
+        w.filingStatus === "E-Verified" ||
+        w.filingStatus === "Pending for E-verification",
+    ).length,
     ready: billing.filter((b) => b.outwardStatus === "Ready").length,
     recentClients,
   };
@@ -235,8 +240,8 @@ export default function DashboardPage({ user }: DashboardPageProps) {
       border: "#FDE68A",
     },
     {
-      label: "Filed ITR",
-      value: stats.filed,
+      label: "ITR Filed",
+      value: stats.itrFiled,
       icon: CheckCircle,
       color: "#16A34A",
       bg: "#F0FDF4",
@@ -255,29 +260,29 @@ export default function DashboardPage({ user }: DashboardPageProps) {
   const whatsappEnabled =
     storage.getWhatsAppSettings()?.dueDateAlertEnabled ?? false;
 
-  // High priority e-verification alerts (< 10 days)
   const highEVerifAlerts = eVerifAlerts.filter((a) => a.urgency === "high");
   const normalEVerifAlerts = eVerifAlerts.filter((a) => a.urgency === "normal");
 
-  // Urgency badge colors for due date alerts
   const urgencyBadgeClass = (urgency: "red" | "amber" | "yellow") => {
     if (urgency === "red") return "bg-red-600 text-white";
     if (urgency === "yellow") return "bg-yellow-500 text-white";
     return "bg-amber-500 text-white";
   };
 
-  // Role-specific greeting
   const greeting =
     user.role === "Staff" ? (
       <div
-        className="rounded-lg p-3 border"
+        className="rounded-lg p-2.5 border"
         style={{
-          background: "rgba(107,26,43,0.05)",
+          background: "var(--theme-primary-light, rgba(107,26,43,0.05))",
           borderColor: "rgba(107,26,43,0.15)",
         }}
         data-ocid="dashboard.greeting.panel"
       >
-        <p className="text-sm font-semibold" style={{ color: "#6B1A2B" }}>
+        <p
+          className="text-sm font-semibold"
+          style={{ color: "var(--theme-primary, #6B1A2B)" }}
+        >
           Welcome, {user.name}
         </p>
         <p className="text-xs text-gray-500 mt-0.5">
@@ -286,7 +291,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
       </div>
     ) : (
       <div
-        className="rounded-lg p-3 border flex items-center justify-between"
+        className="rounded-lg p-2.5 border flex items-center justify-between"
         style={{
           background: "rgba(201,164,76,0.08)",
           borderColor: "rgba(201,164,76,0.3)",
@@ -297,7 +302,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
           <p
             className="text-sm font-semibold"
             style={{
-              color: "#6B1A2B",
+              color: "var(--theme-primary, #6B1A2B)",
               fontFamily: "'Playfair Display', Georgia, serif",
             }}
           >
@@ -313,7 +318,6 @@ export default function DashboardPage({ user }: DashboardPageProps) {
             {user.accessType ? ` \u00b7 ${user.accessType} Plan` : ""}
           </p>
         </div>
-        {/* Compact summary inline */}
         <div className="hidden sm:flex items-center gap-4 text-xs">
           <div className="text-center">
             <div className="font-bold text-lg" style={{ color: "#2563EB" }}>
@@ -331,7 +335,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
           <div className="w-px h-8 bg-gray-200" />
           <div className="text-center">
             <div className="font-bold text-lg" style={{ color: "#16A34A" }}>
-              {stats.filed}
+              {stats.itrFiled}
             </div>
             <div className="text-gray-500">Filed</div>
           </div>
@@ -340,11 +344,14 @@ export default function DashboardPage({ user }: DashboardPageProps) {
     );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {greeting}
 
       <div className="flex items-center gap-3">
-        <h2 className="text-base font-semibold" style={{ color: "#6B1A2B" }}>
+        <h2
+          className="text-base font-semibold"
+          style={{ color: "var(--theme-primary, #6B1A2B)" }}
+        >
           Overview
         </h2>
         <Select value={taxYear} onValueChange={setTaxYear}>
@@ -362,7 +369,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
       </div>
 
       {/* Stat Cards - Compact */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         {cards.map((card) => {
           const Icon = card.icon;
           return (
@@ -371,24 +378,24 @@ export default function DashboardPage({ user }: DashboardPageProps) {
               className="shadow-sm border"
               style={{ borderColor: card.border }}
             >
-              <CardContent className="p-4">
+              <CardContent className="p-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs text-gray-500 font-medium">
                       {card.label}
                     </p>
                     <span
-                      className="text-2xl font-bold mt-0.5 block"
+                      className="text-xl font-bold mt-0.5 block"
                       style={{ color: card.color }}
                     >
                       {card.value}
                     </span>
                   </div>
                   <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center"
                     style={{ background: card.bg }}
                   >
-                    <Icon className="w-5 h-5" style={{ color: card.color }} />
+                    <Icon className="w-4 h-4" style={{ color: card.color }} />
                   </div>
                 </div>
               </CardContent>
@@ -400,23 +407,23 @@ export default function DashboardPage({ user }: DashboardPageProps) {
       {/* E-Verification Deadline Alert - HIGH PRIORITY */}
       {highEVerifAlerts.length > 0 && (
         <div
-          className="border border-l-4 rounded-lg p-4 bg-red-50 border-red-200 border-l-red-600"
+          className="border border-l-4 rounded-lg p-3 bg-red-50 border-red-200 border-l-red-600"
           data-ocid="dashboard.everif_high.panel"
         >
-          <div className="flex items-center gap-2 mb-3">
-            <ShieldAlert className="w-5 h-5 text-red-600 flex-shrink-0" />
-            <span className="font-semibold text-red-700">
-              &#9888; HIGH PRIORITY: E-Verification Deadline Approaching
+          <div className="flex items-center gap-2 mb-2">
+            <ShieldAlert className="w-4 h-4 text-red-600 flex-shrink-0" />
+            <span className="font-semibold text-red-700 text-sm">
+              &#9888; HIGH PRIORITY: E-Verification Deadline
             </span>
             <span className="ml-auto text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-bold">
               {highEVerifAlerts.length} urgent
             </span>
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {highEVerifAlerts.map(({ client, work, daysToDeadline }) => (
               <div
                 key={work.id}
-                className="flex items-center justify-between text-sm bg-white rounded px-3 py-2 border border-red-100"
+                className="flex items-center justify-between text-sm bg-white rounded px-3 py-1.5 border border-red-100"
               >
                 <span className="font-semibold text-gray-800">
                   {client.name}
@@ -435,7 +442,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
               </div>
             ))}
           </div>
-          <p className="text-xs text-red-600 mt-2 font-medium">
+          <p className="text-xs text-red-600 mt-1.5 font-medium">
             E-verification must be completed within 30 days of filing date.
           </p>
         </div>
@@ -447,7 +454,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
           className="border border-l-4 rounded-lg p-3 bg-amber-50 border-amber-200 border-l-amber-500"
           data-ocid="dashboard.everif_normal.panel"
         >
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-1.5">
             <ShieldAlert className="w-4 h-4 text-amber-600 flex-shrink-0" />
             <span className="font-semibold text-amber-700 text-sm">
               E-Verification Deadline Alert ({normalEVerifAlerts.length})
@@ -484,7 +491,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
           }`}
           data-ocid="dashboard.alert.panel"
         >
-          <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
             <div className="flex items-center gap-2">
               <AlertTriangle
                 className={`w-4 h-4 flex-shrink-0 ${
@@ -509,11 +516,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
                 size="sm"
                 onClick={handleQueueWhatsAppAlerts}
                 className="flex items-center gap-1.5 text-xs font-medium flex-shrink-0"
-                style={{
-                  background: "#C9A44C",
-                  color: "#fff",
-                  border: "none",
-                }}
+                style={{ background: "#C9A44C", color: "#fff", border: "none" }}
                 data-ocid="dashboard.queue_whatsapp.button"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
@@ -549,12 +552,15 @@ export default function DashboardPage({ user }: DashboardPageProps) {
 
       {/* Recent clients table */}
       <Card className="shadow-sm">
-        <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm" style={{ color: "#6B1A2B" }}>
+        <CardHeader className="pb-2 pt-3 px-3">
+          <CardTitle
+            className="text-sm"
+            style={{ color: "var(--theme-primary, #6B1A2B)" }}
+          >
             Recent Clients (last 10)
           </CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-4 pt-0">
+        <CardContent className="px-3 pb-3 pt-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -563,13 +569,15 @@ export default function DashboardPage({ user }: DashboardPageProps) {
                     "Name",
                     "PAN",
                     "Tax Year",
+                    "ITR Form",
+                    "Return Type",
                     "Inward Docs",
                     "Work Status",
                     "Filing Status",
                   ].map((h) => (
                     <th
                       key={h}
-                      className="text-left py-2 px-2 font-semibold text-gray-600 text-xs"
+                      className="text-left py-1.5 px-2 font-semibold text-gray-600 text-xs"
                     >
                       {h}
                     </th>
@@ -595,14 +603,33 @@ export default function DashboardPage({ user }: DashboardPageProps) {
                       key={client.id}
                       className="border-b last:border-0 hover:bg-gray-50"
                     >
-                      <td className="py-2 px-2 font-medium text-xs">
+                      <td className="py-1.5 px-2 font-medium text-xs">
                         {client.name}
                       </td>
-                      <td className="py-2 px-2 text-gray-500 text-xs font-mono">
+                      <td className="py-1.5 px-2 text-gray-500 text-xs font-mono">
                         {client.pan}
                       </td>
-                      <td className="py-2 px-2 text-xs">{client.taxYear}</td>
-                      <td className="py-2 px-2">
+                      <td className="py-1.5 px-2 text-xs">{client.taxYear}</td>
+                      <td className="py-1.5 px-2">
+                        {work?.itrForm ? (
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-mono">
+                            <FileText className="w-3 h-3 inline mr-0.5" />
+                            {work.itrForm}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 px-2">
+                        {work?.returnType ? (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                            {work.returnType}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 px-2">
                         {docHasEntry ? (
                           <InlineStatusCell
                             value={docStatus}
@@ -617,7 +644,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
                           </span>
                         )}
                       </td>
-                      <td className="py-2 px-2">
+                      <td className="py-1.5 px-2">
                         <InlineStatusCell
                           value={work?.status || "Pending"}
                           options={WORK_STATUS_OPTIONS}
@@ -626,9 +653,9 @@ export default function DashboardPage({ user }: DashboardPageProps) {
                           }
                         />
                       </td>
-                      <td className="py-2 px-2">
+                      <td className="py-1.5 px-2">
                         <span
-                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${filingStatusColor}`}
+                          className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${filingStatusColor}`}
                         >
                           {filingStatus}
                         </span>
@@ -639,7 +666,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
                 {stats.recentClients.length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={8}
                       className="py-6 text-center text-gray-400"
                       data-ocid="dashboard.empty_state"
                     >

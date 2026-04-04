@@ -24,7 +24,7 @@ interface Props {
 export default function ClientDetailPage({ client, onBack }: Props) {
   const [docForm, setDocForm] = useState({
     date: "",
-    mode: "Gmail" as DocumentInward["mode"],
+    mode: "Email" as DocumentInward["mode"],
     status: "Complete" as DocumentInward["status"],
     remarks: "",
   });
@@ -33,6 +33,8 @@ export default function ClientDetailPage({ client, onBack }: Props) {
 
   const [workForm, setWorkForm] = useState<Partial<WorkProcessing>>({
     filingStatus: "Pending",
+    returnType: "Original",
+    remark: "",
   });
   const [filingDateLocked, setFilingDateLocked] = useState(false);
   const [workError, setWorkError] = useState("");
@@ -67,11 +69,12 @@ export default function ClientDetailPage({ client, onBack }: Props) {
       setWorkForm({
         status: work.status,
         itrForm: work.itrForm,
+        returnType: work.returnType || "Original",
+        remark: work.remark || "",
         ackNumber: work.ackNumber,
         filingDate: work.filingDate,
         filingStatus: fs as WorkProcessing["filingStatus"],
       });
-      // If existing ack number is 15 digits, lock the filing date
       if (work.ackNumber && /^\d{15}$/.test(work.ackNumber)) {
         setFilingDateLocked(true);
       }
@@ -93,15 +96,13 @@ export default function ClientDetailPage({ client, onBack }: Props) {
     return dt > new Date();
   };
 
-  // Derive filing date from last 6 digits of 15-digit ack number
   const deriveFilingDateFromAck = (digits: string): string | null => {
     if (digits.length !== 15) return null;
-    const last6 = digits.slice(9, 15); // positions 9-14
+    const last6 = digits.slice(9, 15);
     const dd = last6.slice(0, 2);
     const mm = last6.slice(2, 4);
     const yy = last6.slice(4, 6);
     const yyyy = `20${yy}`;
-    // Validate it's a real date
     const dayNum = Number(dd);
     const monthNum = Number(mm);
     const yearNum = Number(yyyy);
@@ -136,7 +137,6 @@ export default function ClientDetailPage({ client, onBack }: Props) {
         return;
       }
     }
-    // Less than 15 digits or can't derive -- unlock filing date
     setWorkForm((f) => ({ ...f, ackNumber: digits }));
     setFilingDateLocked(false);
   };
@@ -159,7 +159,7 @@ export default function ClientDetailPage({ client, onBack }: Props) {
       createdAt: new Date().toISOString(),
     };
     storage.saveDocuments([...storage.getDocuments(), newDoc]);
-    setDocForm({ date: "", mode: "Gmail", status: "Complete", remarks: "" });
+    setDocForm({ date: "", mode: "Email", status: "Complete", remarks: "" });
     setRefreshKey((k) => k + 1);
   };
 
@@ -190,6 +190,8 @@ export default function ClientDetailPage({ client, onBack }: Props) {
         ...work,
         status: (workForm.status || work.status) as WorkProcessing["status"],
         itrForm: workForm.itrForm || "",
+        returnType: workForm.returnType || "Original",
+        remark: workForm.remark || "",
         ackNumber: workForm.ackNumber || "",
         filingDate: workForm.filingDate || "",
         filingStatus,
@@ -204,6 +206,8 @@ export default function ClientDetailPage({ client, onBack }: Props) {
         taxYear: client.taxYear,
         status: (workForm.status || "Pending") as WorkProcessing["status"],
         itrForm: workForm.itrForm || "",
+        returnType: workForm.returnType || "Original",
+        remark: workForm.remark || "",
         ackNumber: workForm.ackNumber || "",
         filingDate: workForm.filingDate || "",
         filingStatus,
@@ -236,7 +240,7 @@ export default function ClientDetailPage({ client, onBack }: Props) {
           type="button"
           onClick={onBack}
           className="flex items-center gap-1 text-sm hover:underline"
-          style={{ color: "#6B1A2B" }}
+          style={{ color: "var(--theme-primary, #6B1A2B)" }}
         >
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
@@ -250,44 +254,50 @@ export default function ClientDetailPage({ client, onBack }: Props) {
         </span>
       </div>
 
-      {/* Client Info */}
-      <div className="bg-white rounded-lg border p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 text-sm">
-        <div>
-          <span className="text-gray-500 text-xs">Mobile</span>
-          <br />
-          <span className="font-medium">{client.mobile}</span>
-        </div>
-        <div>
-          <span className="text-gray-500 text-xs">Email</span>
-          <br />
-          <span className="font-medium text-sm">{client.email || "-"}</span>
-        </div>
-        <div>
-          <span className="text-gray-500 text-xs">Category</span>
-          <br />
-          <span className="font-medium">{client.clientCategory}</span>
-        </div>
-        <div>
-          <span className="text-gray-500 text-xs">Head of Income</span>
-          <br />
-          <span className="font-medium">{headOfIncome}</span>
-        </div>
-        {headOfIncome === "Business" && client.businessName && (
-          <div>
-            <span className="text-gray-500 text-xs">Business Name</span>
-            <br />
-            <span className="font-medium">{client.businessName}</span>
+      {/* Client Info - fixed grid to prevent overlap */}
+      <div className="bg-white rounded-lg border p-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-sm">
+          <div className="min-w-0">
+            <span className="text-gray-500 text-xs">Mobile</span>
+            <div className="font-medium truncate">{client.mobile}</div>
           </div>
-        )}
-        <div>
-          <span className="text-gray-500 text-xs">Due Date</span>
-          <br />
-          <span className="font-medium">{client.dueDate}</span>
+          <div className="min-w-0">
+            <span className="text-gray-500 text-xs">Email</span>
+            <div className="font-medium text-xs break-all leading-tight mt-0.5">
+              {client.email || "-"}
+            </div>
+          </div>
+          <div className="min-w-0">
+            <span className="text-gray-500 text-xs">Category</span>
+            <div className="font-medium truncate">{client.clientCategory}</div>
+          </div>
+          <div className="min-w-0">
+            <span className="text-gray-500 text-xs">Head of Income</span>
+            <div className="font-medium truncate">{headOfIncome}</div>
+          </div>
+          {headOfIncome === "Business" && client.businessName && (
+            <div className="min-w-0">
+              <span className="text-gray-500 text-xs">Business Name</span>
+              <div className="font-medium truncate">{client.businessName}</div>
+            </div>
+          )}
+          <div className="min-w-0">
+            <span className="text-gray-500 text-xs">Tax Year</span>
+            <div className="font-medium">{client.taxYear}</div>
+          </div>
+          <div className="min-w-0">
+            <span className="text-gray-500 text-xs">Due Date</span>
+            <div className="font-medium">{client.dueDate}</div>
+          </div>
         </div>
       </div>
 
       <Tabs defaultValue="documents">
-        <TabsList style={{ background: "rgba(107,26,43,0.1)" }}>
+        <TabsList
+          style={{
+            background: "var(--theme-primary-light, rgba(107,26,43,0.1))",
+          }}
+        >
           <TabsTrigger value="documents" style={{ fontWeight: 600 }}>
             Document Inward
           </TabsTrigger>
@@ -298,9 +308,11 @@ export default function ClientDetailPage({ client, onBack }: Props) {
 
         {/* Document Inward Tab */}
         <TabsContent value="documents" className="mt-4 space-y-4">
-          {/* Add form */}
           <div className="bg-white rounded-lg border p-4">
-            <h3 className="font-semibold mb-3" style={{ color: "#6B1A2B" }}>
+            <h3
+              className="font-semibold mb-3"
+              style={{ color: "var(--theme-primary, #6B1A2B)" }}
+            >
               Add Document Entry
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -329,7 +341,7 @@ export default function ClientDetailPage({ client, onBack }: Props) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Gmail">Gmail</SelectItem>
+                    <SelectItem value="Email">Email</SelectItem>
                     <SelectItem value="WhatsApp">WhatsApp</SelectItem>
                     <SelectItem value="Hardcopy">Hardcopy</SelectItem>
                     <SelectItem value="Mix">Mix</SelectItem>
@@ -375,7 +387,7 @@ export default function ClientDetailPage({ client, onBack }: Props) {
               onClick={handleAddDoc}
               size="sm"
               className="mt-3 text-white"
-              style={{ background: "#6B1A2B" }}
+              style={{ background: "var(--theme-primary, #6B1A2B)" }}
             >
               <Plus className="w-3.5 h-3.5 mr-1" /> Add Entry
             </Button>
@@ -384,7 +396,7 @@ export default function ClientDetailPage({ client, onBack }: Props) {
           {/* Document list */}
           <div className="bg-white rounded-lg border overflow-x-auto">
             <table className="w-full text-sm">
-              <thead style={{ background: "#6B1A2B" }}>
+              <thead style={{ background: "var(--theme-primary, #6B1A2B)" }}>
                 <tr>
                   {["Date", "Mode", "Status", "Remarks", "Action"].map((h) => (
                     <th
@@ -443,8 +455,11 @@ export default function ClientDetailPage({ client, onBack }: Props) {
 
         {/* Work Processing Tab */}
         <TabsContent value="work" className="mt-4">
-          <div className="bg-white rounded-lg border p-5 max-w-lg space-y-4">
-            <h3 className="font-semibold" style={{ color: "#6B1A2B" }}>
+          <div className="bg-white rounded-lg border p-5 max-w-2xl space-y-4">
+            <h3
+              className="font-semibold"
+              style={{ color: "var(--theme-primary, #6B1A2B)" }}
+            >
               Work Processing
             </h3>
 
@@ -471,37 +486,76 @@ export default function ClientDetailPage({ client, onBack }: Props) {
               </Select>
             </div>
 
-            {/* ITR Form */}
-            <div>
-              <Label>ITR Form</Label>
-              <Select
-                value={currentWork.itrForm || ""}
-                onValueChange={(v) =>
-                  setWorkForm((f) => ({ ...f, itrForm: v }))
-                }
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select ITR Form" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ITR-1">ITR-1</SelectItem>
-                  <SelectItem value="ITR-2">ITR-2</SelectItem>
-                  <SelectItem value="ITR-3">ITR-3</SelectItem>
-                  <SelectItem value="ITR-4">ITR-4</SelectItem>
-                  <SelectItem value="ITR-5">ITR-5</SelectItem>
-                  <SelectItem value="ITR-6">ITR-6</SelectItem>
-                  <SelectItem value="ITR-7">ITR-7</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* ITR Form + Return Type side by side */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>ITR Form</Label>
+                <Select
+                  value={currentWork.itrForm || ""}
+                  onValueChange={(v) =>
+                    setWorkForm((f) => ({ ...f, itrForm: v }))
+                  }
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select ITR Form" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ITR-1">ITR-1</SelectItem>
+                    <SelectItem value="ITR-2">ITR-2</SelectItem>
+                    <SelectItem value="ITR-3">ITR-3</SelectItem>
+                    <SelectItem value="ITR-4">ITR-4</SelectItem>
+                    <SelectItem value="ITR-5">ITR-5</SelectItem>
+                    <SelectItem value="ITR-6">ITR-6</SelectItem>
+                    <SelectItem value="ITR-7">ITR-7</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Return Type</Label>
+                <Select
+                  value={currentWork.returnType || "Original"}
+                  onValueChange={(v) =>
+                    setWorkForm((f) => ({
+                      ...f,
+                      returnType: v as WorkProcessing["returnType"],
+                    }))
+                  }
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Original">Original</SelectItem>
+                    <SelectItem value="Revised">Revised</SelectItem>
+                    <SelectItem value="Belated">Belated</SelectItem>
+                    <SelectItem value="Updated">Updated</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {/* Acknowledgement Number -- prominent burgundy border */}
+            {/* Remark */}
+            <div>
+              <Label>
+                Remark <span className="text-gray-400 text-xs">(optional)</span>
+              </Label>
+              <Input
+                value={currentWork.remark || ""}
+                onChange={(e) =>
+                  setWorkForm((f) => ({ ...f, remark: e.target.value }))
+                }
+                placeholder="e.g. Revision reason, notes for future reference..."
+                className="mt-1"
+              />
+            </div>
+
+            {/* Acknowledgement Number */}
             <div>
               <Label>Acknowledgement Number (15 digits)</Label>
               <div
                 className="mt-1"
                 style={{
-                  border: "2px solid #6B1A2B",
+                  border: "2px solid var(--theme-primary, #6B1A2B)",
                   borderRadius: "8px",
                   overflow: "hidden",
                 }}
@@ -529,7 +583,7 @@ export default function ClientDetailPage({ client, onBack }: Props) {
               )}
             </div>
 
-            {/* Filing Date -- locked when auto-derived from ack number */}
+            {/* Filing Date */}
             <div>
               <Label>Filing Date (no future date)</Label>
               {filingDateLocked ? (
@@ -611,7 +665,7 @@ export default function ClientDetailPage({ client, onBack }: Props) {
             )}
             <Button
               onClick={handleSaveWork}
-              style={{ background: "#6B1A2B" }}
+              style={{ background: "var(--theme-primary, #6B1A2B)" }}
               className="text-white w-full"
             >
               <Save className="w-4 h-4 mr-2" /> Save Work Processing

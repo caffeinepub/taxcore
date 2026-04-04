@@ -23,8 +23,9 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
+import { useTheme } from "../contexts/ThemeContext";
 import { storage } from "../data/storage";
-import type { Page, User } from "../types";
+import { type Page, THEMES, type User } from "../types";
 import DeadlineBell from "./DeadlineBell";
 
 const ownerNavItems: {
@@ -163,10 +164,11 @@ function EditProfileDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm" data-ocid="profile.dialog">
         <DialogHeader>
-          <DialogTitle style={{ color: "#6B1A2B" }}>Edit Profile</DialogTitle>
+          <DialogTitle style={{ color: "var(--theme-primary, #6B1A2B)" }}>
+            Edit Profile
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 mt-2">
-          {/* Profile info */}
           <div className="space-y-3">
             <div>
               <Label>Name *</Label>
@@ -217,7 +219,7 @@ function EditProfileDialog({
             )}
             <Button
               onClick={handleSaveProfile}
-              style={{ background: "#6B1A2B" }}
+              style={{ background: "var(--theme-primary, #6B1A2B)" }}
               className="text-white w-full"
               data-ocid="profile.save_button"
             >
@@ -297,6 +299,7 @@ export default function Layout({
   const isOwner = user.role === "Owner";
   const isSuperAdmin = user.role === "Super Admin";
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const { theme, setTheme } = useTheme();
   const initials = user.name
     .split(" ")
     .map((w) => w[0])
@@ -305,8 +308,6 @@ export default function Layout({
     .slice(0, 2);
 
   const navItems = isSuperAdmin ? superAdminNavItems : ownerNavItems;
-
-  // Role label for display -- Administrator instead of Super Admin
   const roleDisplayLabel = isSuperAdmin ? "Administrator" : user.role;
 
   return (
@@ -314,7 +315,7 @@ export default function Layout({
       {/* Sidebar */}
       <aside
         className="w-60 flex-shrink-0 flex flex-col"
-        style={{ background: "#6B1A2B" }}
+        style={{ background: theme.primary }}
       >
         {/* Brand */}
         <div
@@ -333,7 +334,6 @@ export default function Layout({
                 if (fallback) fallback.style.display = "flex";
               }}
             />
-            {/* Fallback icon */}
             <div
               className="w-9 h-9 rounded-lg items-center justify-center flex-shrink-0"
               style={{ background: "#C9A84C", display: "none" }}
@@ -398,6 +398,48 @@ export default function Layout({
             );
           })}
         </nav>
+
+        {/* Theme Switcher */}
+        <div
+          className="px-4 py-3 border-t"
+          style={{ borderColor: "rgba(255,255,255,0.12)" }}
+        >
+          <p
+            className="text-xs mb-2 font-medium"
+            style={{ color: "rgba(255,255,255,0.4)" }}
+          >
+            Color Theme
+          </p>
+          <div className="flex items-center gap-2">
+            {Object.values(THEMES).map((t) => (
+              <button
+                type="button"
+                key={t.key}
+                title={t.label}
+                onClick={() => setTheme(t.key)}
+                className="w-7 h-7 rounded-full transition-all flex-shrink-0"
+                style={{
+                  background: t.primary,
+                  border:
+                    theme.key === t.key
+                      ? "2px solid #fff"
+                      : "2px solid rgba(255,255,255,0.3)",
+                  transform: theme.key === t.key ? "scale(1.15)" : "scale(1)",
+                  boxShadow:
+                    theme.key === t.key
+                      ? "0 0 0 1px rgba(255,255,255,0.5)"
+                      : "none",
+                }}
+              />
+            ))}
+          </div>
+          <p
+            className="text-xs mt-1"
+            style={{ color: "rgba(255,255,255,0.3)" }}
+          >
+            {THEMES[theme.key].label}
+          </p>
+        </div>
 
         {/* Secure Cloud badge */}
         <div className="px-4 pb-2">
@@ -470,7 +512,7 @@ export default function Layout({
             <h1
               className="text-xl font-semibold"
               style={{
-                color: "#6B1A2B",
+                color: "var(--theme-primary, #6B1A2B)",
                 fontFamily: "'Playfair Display', Georgia, serif",
               }}
             >

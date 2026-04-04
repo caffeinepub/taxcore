@@ -57,7 +57,7 @@ export interface DocumentInward {
   id: string;
   clientId: string;
   date: string; // DD-MM-YYYY
-  mode: "Gmail" | "WhatsApp" | "Hardcopy" | "Mix";
+  mode: "Email" | "WhatsApp" | "Hardcopy" | "Mix";
   status: "Complete" | "Partial";
   remarks: string;
   createdAt: string;
@@ -69,6 +69,8 @@ export interface WorkProcessing {
   taxYear: string;
   status: "Pending" | "In Progress" | "Filed";
   itrForm: string;
+  returnType?: "Original" | "Revised" | "Belated" | "Updated";
+  remark?: string;
   ackNumber: string;
   filingDate: string; // DD-MM-YYYY
   updatedAt: string;
@@ -140,3 +142,45 @@ export function getHeadOfIncome(client: Client): string {
   if (legacy === "Other") return "Salaried";
   return legacy || "Salaried";
 }
+
+// Theme system
+export type ThemeKey = "burgundy" | "emerald" | "navy" | "violet";
+
+export interface ThemeConfig {
+  key: ThemeKey;
+  label: string;
+  primary: string;
+  primaryLight: string;
+  gold: string;
+}
+
+export const THEMES: Record<ThemeKey, ThemeConfig> = {
+  burgundy: {
+    key: "burgundy",
+    label: "Burgundy",
+    primary: "#6B1A2B",
+    primaryLight: "rgba(107,26,43,0.08)",
+    gold: "#C9A44C",
+  },
+  emerald: {
+    key: "emerald",
+    label: "Emerald",
+    primary: "#065F46",
+    primaryLight: "rgba(6,95,70,0.08)",
+    gold: "#C9A44C",
+  },
+  navy: {
+    key: "navy",
+    label: "Navy",
+    primary: "#1E3A5F",
+    primaryLight: "rgba(30,58,95,0.08)",
+    gold: "#C9A44C",
+  },
+  violet: {
+    key: "violet",
+    label: "Violet",
+    primary: "#4C1D95",
+    primaryLight: "rgba(76,29,149,0.08)",
+    gold: "#C9A44C",
+  },
+};

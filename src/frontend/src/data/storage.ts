@@ -486,7 +486,7 @@ export function seedData() {
       id: "d1",
       clientId: "c1",
       date: "01-04-2025",
-      mode: "Gmail",
+      mode: "Email",
       status: "Complete",
       remarks: "Form 16 received",
       createdAt: new Date().toISOString(),

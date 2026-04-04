@@ -206,7 +206,7 @@ export default function ClientMasterPage({
     );
     if (dup)
       return setFormError(
-        "A client with this PAN and Tax Year already exists.",
+        "A client with this PAN and Tax Year already exists. To file a Revised or Updated return, open the existing client and update the Return Type in Work Processing.",
       );
 
     if (editClient) {
@@ -469,6 +469,7 @@ export default function ClientMasterPage({
                 "Due Date",
                 "Doc Status",
                 "Work Status",
+                "Work Remark",
                 "Actions",
               ].map((h) => (
                 <th
@@ -484,7 +485,7 @@ export default function ClientMasterPage({
             {clients.length === 0 && (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="py-10 text-center text-gray-400"
                   data-ocid="clients.empty_state"
                 >
@@ -601,6 +602,18 @@ export default function ClientMasterPage({
                       options={WORK_STATUS_OPTIONS}
                       onSave={(newVal) => handleWorkStatusSave(client, newVal)}
                     />
+                  </td>
+                  <td className="py-2.5 px-3 max-w-[160px]">
+                    {work?.remark ? (
+                      <span
+                        className="text-xs text-gray-700 italic block truncate"
+                        title={work.remark}
+                      >
+                        {work.remark}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
+                    )}
                   </td>
                   <td className="py-2.5 px-3">
                     <div className="flex gap-1">
