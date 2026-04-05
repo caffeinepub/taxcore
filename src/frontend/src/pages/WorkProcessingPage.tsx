@@ -285,12 +285,43 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
     // Auto-derive filing date from last 6 digits if ack is complete
     const derivedDate = deriveFilingDateFromAck(newAck);
     const changes: Partial<WorkProcessing> = { ackNumber: newAck };
+    const currentStatus = getFilingStatus(work);
+
     if (derivedDate) {
+      // Validate: Filing Date must be after tax year end date (31 March of end year)
+      const tyParts = work.taxYear?.split("-");
+      if (tyParts && tyParts.length === 2) {
+        const endYear = Number(tyParts[1]);
+        const taxYearEndDate = new Date(endYear, 2, 31);
+        taxYearEndDate.setHours(0, 0, 0, 0);
+        const fdParts = derivedDate.split("-");
+        if (fdParts.length === 3) {
+          const filingDt = new Date(
+            Number(fdParts[2]),
+            Number(fdParts[1]) - 1,
+            Number(fdParts[0]),
+          );
+          filingDt.setHours(0, 0, 0, 0);
+          if (filingDt <= taxYearEndDate) {
+            toast.error("Invalid Filing Date", {
+              description: `Filing Date ${derivedDate} must be after 31-03-${endYear} (end of Tax Year ${work.taxYear}). Please check the Acknowledgement Number.`,
+            });
+            return;
+          }
+        }
+      }
       changes.filingDate = derivedDate;
-      // Auto-upgrade filing status from Pending to Pending for E-verification
-      const currentStatus = getFilingStatus(work);
-      if (currentStatus === "Pending") {
+      // Auto-upgrade filing status to Pending for E-verification when ack is entered
+      if (currentStatus !== "E-Verified") {
         changes.filingStatus = "Pending for E-verification";
+        changes.eVerified = false;
+      }
+    } else if (!newAck) {
+      // Ack cleared — reset filing status to Pending (unless E-Verified)
+      if (currentStatus !== "E-Verified") {
+        changes.filingStatus = "Pending";
+        changes.filingDate = "";
+        changes.eVerified = false;
       }
     }
 

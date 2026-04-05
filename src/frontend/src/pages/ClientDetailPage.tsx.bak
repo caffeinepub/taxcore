@@ -192,27 +192,6 @@ export default function ClientDetailPage({ client, onBack }: Props) {
     if (workForm.filingDate) {
       if (!validateDate(workForm.filingDate))
         return setWorkError("Filing Date must be DD-MM-YYYY format.");
-      // Validate: Filing Date must be after the tax year end date (31st March of end year)
-      const tyParts = client.taxYear?.split("-");
-      if (tyParts && tyParts.length === 2) {
-        const endYear = Number(tyParts[1]);
-        const taxYearEndDate = new Date(endYear, 2, 31); // 31 March of end year
-        taxYearEndDate.setHours(0, 0, 0, 0);
-        const fdParts = workForm.filingDate.split("-");
-        if (fdParts.length === 3) {
-          const filingDt = new Date(
-            Number(fdParts[2]),
-            Number(fdParts[1]) - 1,
-            Number(fdParts[0]),
-          );
-          filingDt.setHours(0, 0, 0, 0);
-          if (filingDt <= taxYearEndDate) {
-            return setWorkError(
-              `Filing Date must be after 31-03-${endYear} (end of Tax Year ${client.taxYear}).`,
-            );
-          }
-        }
-      }
     }
 
     const allWork = storage.getWork();
