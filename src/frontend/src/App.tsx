@@ -179,6 +179,7 @@ export default function App() {
         <ClientDetailPage
           client={selectedClient}
           onBack={() => setCurrentPage("clients")}
+          onUpdateClient={(updated) => setSelectedClient(updated)}
         />
       );
     }

@@ -19,9 +19,14 @@ import { getHeadOfIncome } from "../types";
 interface Props {
   client: Client;
   onBack: () => void;
+  onUpdateClient?: (updated: Client) => void;
 }
 
-export default function ClientDetailPage({ client, onBack }: Props) {
+export default function ClientDetailPage({
+  client,
+  onBack,
+  onUpdateClient,
+}: Props) {
   const [docForm, setDocForm] = useState({
     date: "",
     mode: "Email" as DocumentInward["mode"],
@@ -39,6 +44,7 @@ export default function ClientDetailPage({ client, onBack }: Props) {
   const [filingDateLocked, setFilingDateLocked] = useState(false);
   const [workError, setWorkError] = useState("");
   const [workSaved, setWorkSaved] = useState(false);
+  const [dueDate, setDueDate] = useState(client.dueDate || "");
   const workInitialized = useRef(false);
 
   const docs = useMemo(() => {
@@ -188,6 +194,32 @@ export default function ClientDetailPage({ client, onBack }: Props) {
       return setWorkError(
         "Acknowledgement Number must be exactly 15 numeric digits.",
       );
+    // Validate Due Date
+    if (dueDate) {
+      if (!validateDate(dueDate))
+        return setWorkError("Due Date must be in DD-MM-YYYY format.");
+      if (client.taxYear) {
+        const tyParts = client.taxYear.split("-");
+        if (tyParts.length === 2) {
+          const endYear = Number(tyParts[1]);
+          const taxYearEnd = new Date(endYear, 2, 31);
+          taxYearEnd.setHours(0, 0, 0, 0);
+          const dueParts = dueDate.split("-");
+          if (dueParts.length === 3) {
+            const dueDt = new Date(
+              Number(dueParts[2]),
+              Number(dueParts[1]) - 1,
+              Number(dueParts[0]),
+            );
+            dueDt.setHours(0, 0, 0, 0);
+            if (dueDt <= taxYearEnd)
+              return setWorkError(
+                `Due Date must be after 31-03-${endYear} (end of Tax Year ${client.taxYear}).`,
+              );
+          }
+        }
+      }
+    }
     // Filing date is auto-derived from ack number (locked field) — only validate format, not future date
     if (workForm.filingDate) {
       if (!validateDate(workForm.filingDate))
@@ -249,6 +281,15 @@ export default function ClientDetailPage({ client, onBack }: Props) {
         updatedAt: new Date().toISOString(),
       };
       storage.saveWork([...allWork, wp]);
+    }
+    // Also update Due Date on the client record if it changed
+    if (dueDate !== client.dueDate) {
+      const allClients = storage.getClients();
+      const updatedClient: Client = { ...client, dueDate };
+      storage.saveClients(
+        allClients.map((c) => (c.id === client.id ? updatedClient : c)),
+      );
+      if (onUpdateClient) onUpdateClient(updatedClient);
     }
     setWorkSaved(true);
     setTimeout(() => setWorkSaved(false), 2000);
@@ -325,7 +366,7 @@ export default function ClientDetailPage({ client, onBack }: Props) {
           </div>
           <div className="min-w-0">
             <span className="text-gray-500 text-xs">Due Date</span>
-            <div className="font-medium">{client.dueDate}</div>
+            <div className="font-medium">{dueDate || client.dueDate}</div>
           </div>
         </div>
       </div>
@@ -639,6 +680,18 @@ export default function ClientDetailPage({ client, onBack }: Props) {
               </div>
             </div>
 
+            {/* Due Date - editable, synced with Client Master */}
+            <div>
+              <Label>Due Date * (DD-MM-YYYY)</Label>
+              <DatePickerInput
+                value={dueDate}
+                onChange={(v) => setDueDate(v)}
+                placeholder="DD-MM-YYYY"
+              />
+              <p className="text-xs text-gray-400 mt-0.5">
+                Editable here and in Client Master — both stay in sync.
+              </p>
+            </div>
             {/* Filing Status */}
             <div>
               <Label>Filing Status</Label>
