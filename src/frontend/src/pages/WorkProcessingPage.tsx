@@ -61,6 +61,27 @@ function deriveFilingDateFromAck(digits: string): string | null {
   return `${dd}-${mm}-${yyyy}`;
 }
 
+/** Returns days remaining until a DD-MM-YYYY date. Negative = overdue. */
+function daysUntil(ddmmyyyy: string): number | null {
+  if (!ddmmyyyy) return null;
+  const parts = ddmmyyyy.split("-");
+  if (parts.length !== 3) return null;
+  const d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+  d.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.floor((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/** Returns CSS classes for Due Date urgency highlight. */
+function dueDateUrgencyClass(days: number | null, eVerified: boolean): string {
+  if (eVerified || days === null) return "";
+  if (days < 0) return "text-red-700 font-semibold"; // overdue
+  if (days <= 5) return "text-red-600 font-semibold"; // <5 days — red
+  if (days <= 10) return "text-amber-600 font-semibold"; // 6-10 days — amber
+  return "";
+}
+
 // Inline editable acknowledgement number cell
 function AckNumberCell({
   value,
@@ -131,10 +152,12 @@ function AckNumberCell({
 function DueDateCell({
   value,
   taxYear,
+  eVerified,
   onSave,
 }: {
   value: string;
   taxYear: string;
+  eVerified: boolean;
   onSave: (v: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -191,6 +214,9 @@ function DueDateCell({
     setEditing(false);
   };
 
+  const days = daysUntil(value);
+  const urgencyClass = dueDateUrgencyClass(days, eVerified);
+
   if (editing) {
     return (
       <div className="min-w-[160px]">
@@ -231,12 +257,33 @@ function DueDateCell({
         setLocalVal(value);
         setEditing(true);
       }}
-      className="flex items-center gap-1 text-xs group hover:text-blue-600"
-      title="Click to edit due date"
+      className={`flex items-center gap-1 text-xs group hover:text-blue-600 ${urgencyClass}`}
+      title={
+        value
+          ? days === null
+            ? "Click to edit due date"
+            : days < 0
+              ? `Overdue by ${Math.abs(days)} day(s) — click to edit`
+              : `${days} day(s) remaining — click to edit`
+          : "Click to set due date"
+      }
     >
       <span className={value ? "font-mono" : "text-gray-300 italic"}>
         {value || "Set date"}
       </span>
+      {value && days !== null && !eVerified && days <= 10 && (
+        <span
+          className={`ml-1 text-[10px] px-1 rounded-full font-bold ${
+            days < 0
+              ? "bg-red-100 text-red-700"
+              : days <= 5
+                ? "bg-red-100 text-red-600"
+                : "bg-amber-100 text-amber-600"
+          }`}
+        >
+          {days < 0 ? `${Math.abs(days)}d overdue` : `${days}d left`}
+        </span>
+      )}
       <Edit2 className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0" />
     </button>
   );
@@ -274,6 +321,7 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
           pan: client?.pan || "-",
           dueDate: client?.dueDate || "",
           hasAck: !!(w.ackNumber && /^\d{15}$/.test(w.ackNumber)),
+          isEVerified: fs === "E-Verified",
           clientRef: client,
         };
       })
@@ -434,8 +482,8 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
         changes.filingStatus = "Pending for E-verification";
         changes.eVerified = false;
       }
-    } else if (!newAck) {
-      // Ack cleared — reset filing status to Pending (unless E-Verified)
+    } else {
+      // Ack incomplete or cleared — reset filing date and status to Pending (unless E-Verified)
       if (currentStatus !== "E-Verified") {
         changes.filingStatus = "Pending";
         changes.filingDate = "";
@@ -574,139 +622,157 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
                 </td>
               </tr>
             )}
-            {rows.map((row, i) => (
-              <tr
-                key={row.id}
-                data-ocid={`work.item.${i + 1}`}
-                className={`border-b last:border-0 hover:bg-gray-50 transition-colors duration-150 ${
-                  i % 2 === 0 ? "" : "bg-gray-50/30"
-                } ${row.filingStatusDerived === "E-Verified" ? "bg-green-50/40" : ""}`}
-              >
-                <td className="py-2.5 px-3 font-medium text-xs">
-                  {row.clientName}
-                </td>
-                <td className="py-2.5 px-3 font-mono text-xs">{row.pan}</td>
-                <td className="py-2.5 px-3 text-xs">{row.taxYear}</td>
+            {rows.map((row, i) => {
+              const dueDays = daysUntil(row.dueDate);
+              const rowUrgent =
+                !row.isEVerified && dueDays !== null && dueDays <= 10;
+              return (
+                <tr
+                  key={row.id}
+                  data-ocid={`work.item.${i + 1}`}
+                  className={`border-b last:border-0 hover:bg-gray-50 transition-colors duration-150 ${
+                    row.filingStatusDerived === "E-Verified"
+                      ? "bg-green-50/40"
+                      : rowUrgent && dueDays! < 0
+                        ? "bg-red-50/40"
+                        : rowUrgent && dueDays! <= 5
+                          ? "bg-red-50/20"
+                          : rowUrgent
+                            ? "bg-amber-50/30"
+                            : i % 2 === 0
+                              ? ""
+                              : "bg-gray-50/30"
+                  }`}
+                >
+                  <td className="py-2.5 px-3 font-medium text-xs">
+                    {row.clientName}
+                  </td>
+                  <td className="py-2.5 px-3 font-mono text-xs">{row.pan}</td>
+                  <td className="py-2.5 px-3 text-xs">{row.taxYear}</td>
 
-                {/* Due Date - inline editable, synced to Client Master */}
-                <td className="py-2.5 px-3">
-                  <DueDateCell
-                    value={row.dueDate}
-                    taxYear={row.taxYear}
-                    onSave={(v) => handleDueDateSave(row.id, row.clientRef, v)}
-                  />
-                </td>
+                  {/* Due Date - inline editable, color-highlighted when urgent */}
+                  <td className="py-2.5 px-3">
+                    <DueDateCell
+                      value={row.dueDate}
+                      taxYear={row.taxYear}
+                      eVerified={row.isEVerified}
+                      onSave={(v) =>
+                        handleDueDateSave(row.id, row.clientRef, v)
+                      }
+                    />
+                  </td>
 
-                <td className="py-2.5 px-3">
-                  <Select
-                    value={row.status}
-                    onValueChange={(v) => handleStatusChange(row.id, v)}
-                  >
-                    <SelectTrigger
-                      className={`h-7 text-xs w-32 ${
-                        row.status === "Completed"
-                          ? "bg-green-100 text-green-700 border-green-200"
-                          : row.status === "In Progress"
-                            ? "bg-blue-100 text-blue-700 border-blue-200"
-                            : "bg-orange-100 text-orange-700 border-orange-200"
-                      }`}
-                      data-ocid={`work.status.${i + 1}`}
+                  <td className="py-2.5 px-3">
+                    <Select
+                      value={row.status}
+                      onValueChange={(v) => handleStatusChange(row.id, v)}
                     >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pending" className="text-xs">
-                        Pending
-                      </SelectItem>
-                      <SelectItem value="In Progress" className="text-xs">
-                        In Progress
-                      </SelectItem>
-                      <SelectItem value="Completed" className="text-xs">
-                        Completed
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </td>
-
-                {/* ITR Form - inline editable dropdown */}
-                <td className="py-2.5 px-3">
-                  <Select
-                    value={row.itrForm || ""}
-                    onValueChange={(v) => handleItrFormChange(row.id, v)}
-                  >
-                    <SelectTrigger
-                      className="h-7 text-xs w-24 border-dashed"
-                      data-ocid={`work.toggle.${i + 1}`}
-                    >
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ITR_FORMS.map((f) => (
-                        <SelectItem key={f} value={f} className="text-xs">
-                          {f}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </td>
-
-                {/* Ack Number - inline editable */}
-                <td className="py-2.5 px-3">
-                  <AckNumberCell
-                    value={row.ackNumber || ""}
-                    onSave={(v) => handleAckNumberSave(row.id, v)}
-                  />
-                </td>
-
-                {/* Filing Date - always locked, auto-filled from Ack No */}
-                <td className="py-2.5 px-3">
-                  <div className="flex items-center gap-1 text-xs font-mono text-gray-700">
-                    <Lock className="w-3 h-3 text-gray-400 shrink-0" />
-                    <span>{row.filingDate || "\u2014"}</span>
-                  </div>
-                </td>
-
-                {/* Filing Status - restricted to post-filing options when ack exists */}
-                <td className="py-2.5 px-3">
-                  <Select
-                    value={row.filingStatusDerived}
-                    onValueChange={(v) =>
-                      handleFilingStatusChange(
-                        row.id,
-                        v as WorkProcessing["filingStatus"],
-                        row.hasAck,
-                      )
-                    }
-                  >
-                    <SelectTrigger
-                      className={`h-7 text-xs w-44 ${filingStatusBadge(row.filingStatusDerived)}`}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {/* "Pending" only shown when no ack number */}
-                      {!row.hasAck && (
+                      <SelectTrigger
+                        className={`h-7 text-xs w-32 ${
+                          row.status === "Completed"
+                            ? "bg-green-100 text-green-700 border-green-200"
+                            : row.status === "In Progress"
+                              ? "bg-blue-100 text-blue-700 border-blue-200"
+                              : "bg-orange-100 text-orange-700 border-orange-200"
+                        }`}
+                        data-ocid={`work.status.${i + 1}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
                         <SelectItem value="Pending" className="text-xs">
                           Pending
                         </SelectItem>
-                      )}
-                      <SelectItem
-                        value="Pending for E-verification"
-                        className="text-xs"
+                        <SelectItem value="In Progress" className="text-xs">
+                          In Progress
+                        </SelectItem>
+                        <SelectItem value="Completed" className="text-xs">
+                          Completed
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+
+                  {/* ITR Form - inline editable dropdown */}
+                  <td className="py-2.5 px-3">
+                    <Select
+                      value={row.itrForm || ""}
+                      onValueChange={(v) => handleItrFormChange(row.id, v)}
+                    >
+                      <SelectTrigger
+                        className="h-7 text-xs w-24 border-dashed"
+                        data-ocid={`work.toggle.${i + 1}`}
                       >
-                        Pending for E-verification
-                      </SelectItem>
-                      <SelectItem value="E-Verified" className="text-xs">
-                        <span className="flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3 text-green-600" />
-                          E-Verified
-                        </span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </td>
-              </tr>
-            ))}
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ITR_FORMS.map((f) => (
+                          <SelectItem key={f} value={f} className="text-xs">
+                            {f}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+
+                  {/* Ack Number - inline editable */}
+                  <td className="py-2.5 px-3">
+                    <AckNumberCell
+                      value={row.ackNumber || ""}
+                      onSave={(v) => handleAckNumberSave(row.id, v)}
+                    />
+                  </td>
+
+                  {/* Filing Date - always locked, auto-filled from Ack No */}
+                  <td className="py-2.5 px-3">
+                    <div className="flex items-center gap-1 text-xs font-mono text-gray-700">
+                      <Lock className="w-3 h-3 text-gray-400 shrink-0" />
+                      <span>{row.filingDate || "\u2014"}</span>
+                    </div>
+                  </td>
+
+                  {/* Filing Status - restricted to post-filing options when ack exists */}
+                  <td className="py-2.5 px-3">
+                    <Select
+                      value={row.filingStatusDerived}
+                      onValueChange={(v) =>
+                        handleFilingStatusChange(
+                          row.id,
+                          v as WorkProcessing["filingStatus"],
+                          row.hasAck,
+                        )
+                      }
+                    >
+                      <SelectTrigger
+                        className={`h-7 text-xs w-44 ${filingStatusBadge(row.filingStatusDerived)}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {/* "Pending" only shown when no ack number */}
+                        {!row.hasAck && (
+                          <SelectItem value="Pending" className="text-xs">
+                            Pending
+                          </SelectItem>
+                        )}
+                        <SelectItem
+                          value="Pending for E-verification"
+                          className="text-xs"
+                        >
+                          Pending for E-verification
+                        </SelectItem>
+                        <SelectItem value="E-Verified" className="text-xs">
+                          <span className="flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3 text-green-600" />
+                            E-Verified
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

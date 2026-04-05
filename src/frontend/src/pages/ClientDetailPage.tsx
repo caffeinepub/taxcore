@@ -43,6 +43,7 @@ export default function ClientDetailPage({
   });
   const [filingDateLocked, setFilingDateLocked] = useState(false);
   const [workError, setWorkError] = useState("");
+  const [ackError, setAckError] = useState("");
   const [workSaved, setWorkSaved] = useState(false);
   const [dueDate, setDueDate] = useState(client.dueDate || "");
   const workInitialized = useRef(false);
@@ -70,18 +71,24 @@ export default function ClientDetailPage({
   useEffect(() => {
     if (work && !workInitialized.current) {
       workInitialized.current = true;
-      const fs =
-        work.filingStatus ?? (work.eVerified ? "E-Verified" : "Pending");
+      const hasValidAck = !!(work.ackNumber && /^\d{15}$/.test(work.ackNumber));
+      // Normalize filing status: if no valid ack number, status must be Pending (not Pending for E-verification)
+      let fs = work.filingStatus ?? (work.eVerified ? "E-Verified" : "Pending");
+      if (!hasValidAck && fs === "Pending for E-verification") {
+        fs = "Pending";
+      }
+      // Normalize filing date: if no valid ack number, clear the filing date
+      const filingDate = hasValidAck ? work.filingDate || "" : "";
       setWorkForm({
         status: work.status,
         itrForm: work.itrForm,
         returnType: work.returnType || "Original",
         remark: work.remark || "",
         ackNumber: work.ackNumber,
-        filingDate: work.filingDate,
+        filingDate: filingDate,
         filingStatus: fs as WorkProcessing["filingStatus"],
       });
-      if (work.ackNumber && /^\d{15}$/.test(work.ackNumber)) {
+      if (hasValidAck) {
         setFilingDateLocked(true);
       }
     }
@@ -135,10 +142,50 @@ export default function ClientDetailPage({
 
   const handleAckNumberChange = (raw: string) => {
     const digits = raw.replace(/\D/g, "").slice(0, 15);
+    setAckError(""); // clear previous error
+
     if (digits.length === 15) {
       const derived = deriveFilingDateFromAck(digits);
       if (derived) {
-        // Auto-fill filing date and upgrade filing status unless already E-Verified
+        // Validate: filing date must be after 31 March of tax year end year
+        const tyParts = client.taxYear?.split("-");
+        let isAfterYearEnd = true;
+        let endYear = 0;
+        if (tyParts && tyParts.length === 2) {
+          endYear = Number(tyParts[1]);
+          const taxYearEndDate = new Date(endYear, 2, 31); // 31 March
+          taxYearEndDate.setHours(0, 0, 0, 0);
+          const fdParts = derived.split("-");
+          if (fdParts.length === 3) {
+            const filingDt = new Date(
+              Number(fdParts[2]),
+              Number(fdParts[1]) - 1,
+              Number(fdParts[0]),
+            );
+            filingDt.setHours(0, 0, 0, 0);
+            if (filingDt <= taxYearEndDate) {
+              isAfterYearEnd = false;
+            }
+          }
+        }
+
+        if (!isAfterYearEnd) {
+          // Derived date is invalid (on/before 31 March) — show error, don't upgrade
+          setAckError(
+            `Filing Date ${derived} derived from Ack No must be after 31-03-${endYear} (Tax Year ${client.taxYear}). Please check the Acknowledgement Number.`,
+          );
+          setWorkForm((f) => ({
+            ...f,
+            ackNumber: digits,
+            filingDate: "",
+            filingStatus:
+              f.filingStatus === "E-Verified" ? "E-Verified" : "Pending",
+          }));
+          setFilingDateLocked(false);
+          return;
+        }
+
+        // Valid date after year end — auto-fill and upgrade
         setWorkForm((f) => ({
           ...f,
           ackNumber: digits,
@@ -152,10 +199,12 @@ export default function ClientDetailPage({
         return;
       }
     }
-    // Ack cleared or incomplete — reset filing status to Pending (unless E-Verified)
+
+    // Ack cleared or incomplete — reset filing date and status to Pending (unless E-Verified)
     setWorkForm((f) => ({
       ...f,
       ackNumber: digits,
+      filingDate: "",
       filingStatus: f.filingStatus === "E-Verified" ? "E-Verified" : "Pending",
     }));
     setFilingDateLocked(false);
@@ -190,6 +239,7 @@ export default function ClientDetailPage({
 
   const handleSaveWork = () => {
     setWorkError("");
+    setAckError("");
     if (workForm.ackNumber && !/^\d{15}$/.test(workForm.ackNumber))
       return setWorkError(
         "Acknowledgement Number must be exactly 15 numeric digits.",
@@ -658,6 +708,11 @@ export default function ClientDetailPage({
                         ✓ Filing date auto-filled
                       </span>
                     )}
+                </p>
+              )}
+              {ackError && (
+                <p className="text-red-600 text-xs mt-1 bg-red-50 rounded p-1.5">
+                  ⚠ {ackError}
                 </p>
               )}
             </div>
