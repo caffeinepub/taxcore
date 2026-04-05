@@ -214,6 +214,21 @@ export default function ClientMasterPage({
     if (!form.taxYear) return setFormError("Tax Year is required.");
     if (!validateDate(form.dueDate))
       return setFormError("Due Date must be in DD-MM-YYYY format.");
+    // Validate Due Date is after tax year end (31 March of end year)
+    if (form.taxYear && validateDate(form.dueDate)) {
+      const endYear = Number(form.taxYear.split("-")[1]);
+      const taxYearEnd = new Date(endYear, 2, 31); // March 31 of end year
+      const dueParts = form.dueDate.split("-");
+      const dueDate = new Date(
+        Number(dueParts[2]),
+        Number(dueParts[1]) - 1,
+        Number(dueParts[0]),
+      );
+      if (dueDate <= taxYearEnd)
+        return setFormError(
+          `Due Date must be after 31-03-${endYear} (end of tax year ${form.taxYear}).`,
+        );
+    }
 
     const pan = form.pan.toUpperCase();
     const allClients = storage.getClients();
