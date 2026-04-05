@@ -9,8 +9,9 @@ import {
 import { CheckCircle, Edit2, Lock, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import DatePickerInput from "../components/DatePickerInput";
 import { getFilingStatus, onStorageChange, storage } from "../data/storage";
-import type { User, WorkProcessing } from "../types";
+import type { Client, User, WorkProcessing } from "../types";
 import { getTaxYears } from "../utils/taxYears";
 
 const TAX_YEARS = ["All", ...getTaxYears()];
@@ -126,6 +127,121 @@ function AckNumberCell({
   );
 }
 
+// Inline editable Due Date cell
+function DueDateCell({
+  value,
+  taxYear,
+  onSave,
+}: {
+  value: string;
+  taxYear: string;
+  onSave: (v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [localVal, setLocalVal] = useState(value);
+
+  // Compute minDate: day after 31-March of end year
+  const minDate = useMemo(() => {
+    const parts = taxYear?.split("-");
+    if (parts && parts.length === 2) {
+      const endYear = Number(parts[1]);
+      const d = new Date(endYear, 2, 31); // 31 March of end year
+      d.setDate(d.getDate() + 1); // one day after
+      return d;
+    }
+    return undefined;
+  }, [taxYear]);
+
+  const commit = () => {
+    if (!localVal) {
+      onSave("");
+      setEditing(false);
+      return;
+    }
+    // Validate format
+    const parts = localVal.split("-");
+    if (parts.length !== 3) {
+      toast.error("Due Date must be in DD-MM-YYYY format");
+      setLocalVal(value);
+      setEditing(false);
+      return;
+    }
+    // Validate after tax year end
+    if (minDate) {
+      const tyParts = taxYear.split("-");
+      const endYear = Number(tyParts[1]);
+      const dueDt = new Date(
+        Number(parts[2]),
+        Number(parts[1]) - 1,
+        Number(parts[0]),
+      );
+      dueDt.setHours(0, 0, 0, 0);
+      const taxYearEnd = new Date(endYear, 2, 31);
+      taxYearEnd.setHours(0, 0, 0, 0);
+      if (dueDt <= taxYearEnd) {
+        toast.error(
+          `Due Date must be after 31-03-${endYear} (end of Tax Year ${taxYear})`,
+        );
+        setLocalVal(value);
+        setEditing(false);
+        return;
+      }
+    }
+    onSave(localVal);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="min-w-[160px]">
+        <DatePickerInput
+          value={localVal}
+          onChange={(v) => setLocalVal(v)}
+          placeholder="DD-MM-YYYY"
+          minDate={minDate}
+        />
+        <div className="flex gap-1 mt-1">
+          <button
+            type="button"
+            onClick={commit}
+            className="text-xs px-2 py-0.5 rounded text-white"
+            style={{ background: "var(--theme-primary, #6B1414)" }}
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setLocalVal(value);
+              setEditing(false);
+            }}
+            className="text-xs px-2 py-0.5 rounded border text-gray-600"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setLocalVal(value);
+        setEditing(true);
+      }}
+      className="flex items-center gap-1 text-xs group hover:text-blue-600"
+      title="Click to edit due date"
+    >
+      <span className={value ? "font-mono" : "text-gray-300 italic"}>
+        {value || "Set date"}
+      </span>
+      <Edit2 className="w-3 h-3 text-gray-300 group-hover:text-blue-500 flex-shrink-0" />
+    </button>
+  );
+}
+
 export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -156,7 +272,9 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
           filingStatusDerived: fs,
           clientName: client?.name || "-",
           pan: client?.pan || "-",
+          dueDate: client?.dueDate || "",
           hasAck: !!(w.ackNumber && /^\d{15}$/.test(w.ackNumber)),
+          clientRef: client,
         };
       })
       .filter((r) => {
@@ -343,6 +461,41 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
     }
   };
 
+  const handleDueDateSave = (
+    _workId: string,
+    clientRef: Client | undefined,
+    newDueDate: string,
+  ) => {
+    if (!clientRef) return;
+    const oldDueDate = clientRef.dueDate || "-";
+    if (oldDueDate === newDueDate) return;
+
+    // Update on the client record
+    const allClients = storage.getClients();
+    storage.saveClients(
+      allClients.map((c) =>
+        c.id === clientRef.id ? { ...c, dueDate: newDueDate } : c,
+      ),
+    );
+
+    if (user) {
+      storage.addAuditLog({
+        id: storage.uid(),
+        userId: user.id,
+        userName: user.name,
+        action: "Updated Due Date",
+        clientId: clientRef.id,
+        clientName: clientRef.name,
+        fieldChanged: "Due Date",
+        oldValue: oldDueDate,
+        newValue: newDueDate || "-",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    toast.success(`Due date updated to ${newDueDate || "(cleared)"}`);
+  };
+
   const filingStatusBadge = (status: string) => {
     if (status === "E-Verified")
       return "bg-green-100 text-green-700 border border-green-200";
@@ -397,6 +550,7 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
                 "Client",
                 "PAN",
                 "Tax Year",
+                "Due Date",
                 "Work Status",
                 "ITR Form",
                 "Ack Number",
@@ -415,7 +569,7 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-gray-400">
+                <td colSpan={9} className="py-8 text-center text-gray-400">
                   No work records found
                 </td>
               </tr>
@@ -433,6 +587,16 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
                 </td>
                 <td className="py-2.5 px-3 font-mono text-xs">{row.pan}</td>
                 <td className="py-2.5 px-3 text-xs">{row.taxYear}</td>
+
+                {/* Due Date - inline editable, synced to Client Master */}
+                <td className="py-2.5 px-3">
+                  <DueDateCell
+                    value={row.dueDate}
+                    taxYear={row.taxYear}
+                    onSave={(v) => handleDueDateSave(row.id, row.clientRef, v)}
+                  />
+                </td>
+
                 <td className="py-2.5 px-3">
                   <Select
                     value={row.status}
