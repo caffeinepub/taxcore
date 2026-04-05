@@ -1,43 +1,60 @@
-# TaxCore
+# TaxCore — Improvements: Dashboard Fix, Staff Management, Trial System, Performance, Security
 
 ## Current State
 
-- `ClientDetailPage.tsx` has a Work Processing tab with fields: Work Status (Pending/In Progress/Filed), ITR Form, Acknowledgement Number, Filing Date (manual/picker), Filing Status (Pending/Pending for E-verification/E-Verified).
-- `ClientDetailPage.tsx` has a Document Inward tab that allows adding multiple entries with Date, Mode (Email/WhatsApp/Hardcopy/Mix), Status (Complete/Partial), Remarks.
-- `ClientMasterPage.tsx` auto-creates a Work Processing record with Status=Pending on new client save.
-- `types.ts` has `WorkProcessing` with `status: 'Pending' | 'In Progress' | 'Filed'`.
-- `DocumentInward.mode` currently includes 'Email' but the user wants 'Gmail' instead of 'Email'.
-- Acknowledgement Number field is a plain Input with no special border styling.
-- Filing Date is currently a DatePickerInput (free entry).
+- **Frontend:** React + TypeScript, Vite, Tailwind/shadcn, ICP canister backend
+- **Storage:** Hybrid — in-memory cache + localStorage (fast) + ICP canister (persistent). `storage.ts` / `canisterDb.ts` pattern.
+- **Auth:** Email+password, roles: Super Admin, Owner, Staff. Stored in canister USERDB
+- **Dashboard (`DashboardPage.tsx`):** Computes stats from in-memory `storage.getClients()` / `getWork()` / `getBilling()`. Listens to `onStorageChange` events. Stats compute correctly from cache but only when cache is loaded from canister. No loading state on dashboard itself.
+- **Staff Management (`UserManagementPage.tsx`):** Owner can add/delete staff. Staff users are saved to user DB (canister). Works functionally but staff see Owner's full client list — no data scoping by `createdBy`.
+- **Trial System:** `accessType: 'Trial' | 'Full'` field exists on `User`. No enforcement in `ClientMasterPage.tsx` — trial limit of 5 clients is not checked before adding.
+- **Performance:** `initialize()` loads all data from canister sequentially: userDb → clients → work → billing → auditLogs → documents (after clients). No caching headers, no optimistic UI beyond localStorage fallback.
+- **Security/Data Isolation:** All clients loaded via `actor.getAllClients()` with anonymous identity — canister returns ALL clients for the anonymous principal. Isolation is done at frontend by filtering via `createdBy` only for Staff role. Owners see all clients in the canister (no firm-level isolation at canister layer). This is the existing design — cannot change backend.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Filing Date auto-derive from Acknowledgement Number**: When a 15-digit ack number is entered, auto-extract the last 6 digits to derive the filing date. Format: last 6 digits = DDMMYY → convert to DD-MM-20YY. Auto-fill the Filing Date field and lock it (read-only) when derived from ack number. If ack number is cleared/changed, recalculate or unlock.
-- **Acknowledgement Number styled border**: Add a clear, prominent bordered input box for the Ack Number field — use a thick rounded border (e.g. 2px solid #6B1A2B or gold) so it visually stands out as an important field.
-- **Work Processing status options update**: Change Work Status dropdown options to: Pending, In Progress, Filed (already correct — confirm no change needed from user's latest message).
-- **Document Inward mode**: Change 'Email' to 'Gmail' in mode options (Email → Gmail). Update type in `types.ts` and all references.
-- **Document Inward master tab**: Ensure the Document Inward tab is visible and functional in ClientDetailPage (already exists — verify it renders correctly; the user says it is missing, so double-check the tab renders and is accessible).
-- **Auto Work Processing on client create**: Already implemented in ClientMasterPage — verify and ensure it still works correctly and status starts as 'Pending'.
+- **Trial enforcement:** When Owner has `accessType: 'Trial'`, cap client additions at 5. Show a clear upgrade banner/modal when the limit is reached.
+- **Dashboard refresh from canister:** On mount, dashboard should trigger a fresh canister data pull (not just rely on localStorage) and re-render stats after load. Add a visible "Refresh" button on dashboard.
+- **Staff data scoping:** Staff users should only see clients they created (`createdBy === user.id`). Apply this filter in `ClientMasterPage` and `DashboardPage` when `user.role === 'Staff'`.
+- **Per-firm data isolation:** Owner data is namespaced by `ownerId` (the Owner user's `id`) stored as prefix in clients' `createdBy`. On load, filter all canister data to only show records where the top-level owner matches the currently logged-in user's firm. For Owner, firm = own `id`. For Staff, firm = the owner who created them (stored in `user.id`'s parent firm). Use the existing `createdBy` field scoping.
+- **Performance: parallel canister load:** `loadAllFromCanister()` in `canisterDb.ts` already fetches in parallel for most data. Ensure documents are also fetched in parallel (not sequentially after clients).
+- **Loading skeleton on dashboard cards:** Show skeleton placeholders in stat cards while canister data loads.
 
 ### Modify
-- **`types.ts`**: Change `DocumentInward.mode` union from `'Email' | 'WhatsApp' | 'Hardcopy' | 'Mix'` to `'Gmail' | 'WhatsApp' | 'Hardcopy' | 'Mix'`.
-- **`ClientDetailPage.tsx` — Acknowledgement Number field**: Add prominent styled border (2px solid #6B1A2B, rounded-lg, padding), add `onChange` handler that reads last 6 digits and auto-fills Filing Date.
-- **`ClientDetailPage.tsx` — Filing Date field**: Make it read-only / locked when auto-derived from ack number. Show a lock icon or note "Auto-filled from Ack No." When ack number is blank or < 15 digits, allow manual entry.
-- **`ClientDetailPage.tsx` — Document Inward mode select**: Change `SelectItem value="Email"` to `value="Gmail"` and label to "Gmail".
-- **`ClientMasterPage.tsx`**: Update `DOC_STATUS_OPTIONS` and mode references if Email→Gmail affects inline editing.
+- **`ClientMasterPage.tsx`:** Before saving a new client, check if `currentUser.accessType === 'Trial'` and current client count >= 5. If so, block the save and show upgrade message instead of the form.
+- **`DashboardPage.tsx`:** Add a "Refresh" button that calls `initialize()` and re-renders. Show skeleton state for stat cards while loading. Ensure stats are scoped: Staff see only their clients' stats.
+- **`storage.ts` `initialize()`:** Add a `forceRefresh` parameter or export a separate `refreshFromCanister()` function to allow re-fetching without needing a full page reload.
+- **`UserManagementPage.tsx`:** When creating staff, store the Owner's ID in the staff user's profile (e.g., in a `firmOwnerId` field) so staff data can be scoped back to the owner's firm. Also display staff's `isActive` status.
+- **`App.tsx`:** Pass `user.accessType` through to `ClientMasterPage` so it can enforce the trial limit.
+- **`canisterDb.ts` `loadAllFromCanister()`:** Fetch documents in parallel with other data (remove sequential dependency on clients).
 
 ### Remove
 - Nothing removed.
 
 ## Implementation Plan
 
-1. **`types.ts`**: Update `DocumentInward.mode` type to `'Gmail' | 'WhatsApp' | 'Hardcopy' | 'Mix'`.
-2. **`ClientDetailPage.tsx`**:
-   a. In `docForm` state, change default mode from `'Email'` to `'Gmail'`.
-   b. In Document Inward tab mode `<Select>`, change SelectItem value/label from `Email` → `Gmail`.
-   c. In Work Processing tab, style the Acknowledgement Number input with a thick Burgundy/gold border (add className with border-2 and a ring style or use inline style with border: '2px solid #6B1A2B').
-   d. Add derived filing date logic: in the `onChange` for ackNumber, after setting the value, if the new value has exactly 15 digits, extract `ackNumber.slice(9, 15)` (last 6 digits = positions 9-14 in 0-indexed), parse as DDMMYY → `DD-MM-20YY`, and call `setWorkForm(f => ({ ...f, filingDate: derivedDate, filingDateLocked: true }))`.
-   e. Add `filingDateLocked` boolean to workForm state. When true, render Filing Date as a read-only styled div (or disabled input) showing the auto-derived date with a lock icon. When false (ack number < 15 digits or cleared), show the normal DatePickerInput.
-3. **`ClientMasterPage.tsx`**: No mode changes needed to inline doc status editing (it only shows Complete/Partial, not mode). Ensure auto-WorkProcessing creation remains intact.
-4. **Verify** Document Inward tab renders: The tab exists in ClientDetailPage. If user sees it missing, confirm the `Tabs defaultValue="documents"` is set so it opens by default.
+1. **`canisterDb.ts`:** Update `loadAllFromCanister()` to fetch documents in parallel (not after clients). Move `canisterGetAllDocuments()` to call `actor.getAllWorkProcessing()` approach — fetch all docs via `actor.getAllClients()` once, then fan out in parallel; ensure this is batched in a single `Promise.all`.
+
+2. **`storage.ts`:** Add `refreshFromCanister(): Promise<void>` export — resets `initPromise`/`isInitialized` flags and re-runs full canister load, merging fresh data into cache and dispatching `taxcore-storage-change`.
+
+3. **`types.ts`:** Add optional `firmOwnerId?: string` to `User` interface to track which Owner a Staff member belongs to.
+
+4. **`DashboardPage.tsx`:**
+   - Add skeleton loading state for the 4 stat cards (use Tailwind `animate-pulse` skeleton divs).
+   - Add a "Refresh" button (small, icon + text) that calls `refreshFromCanister()` from storage, shows a spinner while loading, then re-renders stats.
+   - Scope `computeStats()`: for Staff role, filter clients to only those with `createdBy === user.id`. For Owner, show all clients.
+   - After `initialize()` completes in `App.tsx`, dispatch a storage change so dashboard re-renders with fresh data.
+
+5. **`ClientMasterPage.tsx`:**
+   - Accept `userAccessType` prop (or read from `storage.getCurrentUser()` directly).
+   - In `openAdd()` (add client handler): check if `currentUser.accessType === 'Trial'` and `storage.getClients().filter(c => c.createdBy === currentUser.id || userRole === 'Owner').length >= 5`. If true, show upgrade dialog/banner instead of the add form.
+   - Upgrade message dialog: "You've reached the 5 client limit for the Trial plan. Contact your Administrator to upgrade to the Full plan for unlimited clients."
+
+6. **`UserManagementPage.tsx`:**
+   - When creating a new Staff user, set `firmOwnerId: currentUser.id` on the new User object.
+   - Show `isActive` badge next to each staff member.
+
+7. **`App.tsx`:**
+   - Pass `currentUserId` and `accessType` to `ClientMasterPage` and `DashboardPage`.
+   - After `initialize()` completes, dispatch a storage change event (already done via `setStorageReady(true)` + `onStorageChange`) — verify this triggers dashboard re-render correctly.

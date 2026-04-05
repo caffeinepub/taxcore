@@ -76,6 +76,7 @@ export default function UserManagementPage() {
       mobile: form.mobile.trim(),
       role: "Staff",
       isActive: true,
+      firmOwnerId: currentUser?.id, // links staff to this owner
     };
     storage.saveUsers([...allUsers, newUser]);
     setForm({
@@ -251,9 +252,20 @@ export default function UserManagementPage() {
                   {u.mobile || <span className="text-gray-300 italic">—</span>}
                 </td>
                 <td className="py-2.5 px-4">
-                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                    Staff
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 w-fit">
+                      Staff
+                    </span>
+                    {u.isActive !== false ? (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 w-fit">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 w-fit">
+                        Inactive
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-2.5 px-4">
                   <button

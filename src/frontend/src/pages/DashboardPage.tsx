@@ -13,6 +13,7 @@ import {
   Clock,
   FileText,
   MessageSquare,
+  RefreshCw,
   ShieldAlert,
   Truck,
   Users,
@@ -28,6 +29,7 @@ import {
   getLatestDocStatus,
   onStorageChange,
   queueDueDateNotifications,
+  refreshFromCanister,
   storage,
 } from "../data/storage";
 import type { Client, User } from "../types";
@@ -62,8 +64,12 @@ const DOC_STATUS_OPTIONS = [
   },
 ];
 
-function computeStats(taxYear: string) {
-  const allClients = storage.getClients();
+function computeStats(taxYear: string, userId: string, userRole: string) {
+  let allClients = storage.getClients();
+  // Staff: only see their own clients
+  if (userRole === "Staff") {
+    allClients = allClients.filter((c) => c.createdBy === userId);
+  }
   const clients: Client[] =
     taxYear === "All"
       ? allClients
@@ -99,29 +105,52 @@ interface DashboardPageProps {
 
 export default function DashboardPage({ user }: DashboardPageProps) {
   const [taxYear, setTaxYear] = useState("All");
-  const [stats, setStats] = useState(() => computeStats("All"));
+  const [stats, setStats] = useState(() =>
+    computeStats("All", user.id, user.role),
+  );
   const [alertClients, setAlertClients] = useState(() =>
     getDeadlineAlertClients(user.id, user.role),
   );
   const [eVerifAlerts, setEVerifAlerts] = useState(() =>
     getEVerificationAlerts(),
   );
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [cardsLoading, setCardsLoading] = useState(
+    storage.getClients().length === 0 && storage.getWork().length === 0,
+  );
 
   const refresh = useCallback(
     (year: string) => {
-      setStats(computeStats(year));
+      setStats(computeStats(year, user.id, user.role));
       setAlertClients(getDeadlineAlertClients(user.id, user.role));
       setEVerifAlerts(getEVerificationAlerts());
     },
     [user.id, user.role],
   );
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshFromCanister();
+      refresh(taxYear);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     refresh(taxYear);
   }, [taxYear, refresh]);
 
   useEffect(() => {
-    const unsub = onStorageChange(() => refresh(taxYear));
+    const unsub = onStorageChange(() => {
+      setCardsLoading(false);
+      refresh(taxYear);
+    });
+    // If already loaded (cache exists), don't show skeleton
+    if (storage.getClients().length > 0 || storage.getWork().length > 0) {
+      setCardsLoading(false);
+    }
     return unsub;
   }, [taxYear, refresh]);
 
@@ -366,43 +395,83 @@ export default function DashboardPage({ user }: DashboardPageProps) {
             ))}
           </SelectContent>
         </Select>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50 transition"
+          title="Refresh from server"
+          data-ocid="dashboard.refresh.button"
+        >
+          {isRefreshing ? (
+            <span
+              className="w-3.5 h-3.5 rounded-full border-2 border-t-transparent animate-spin"
+              style={{
+                borderColor: "var(--theme-primary, #6B1A2B)",
+                borderTopColor: "transparent",
+              }}
+            />
+          ) : (
+            <RefreshCw className="w-3.5 h-3.5 text-gray-500" />
+          )}
+          <span className="text-gray-600">
+            {isRefreshing ? "Refreshing…" : "Refresh"}
+          </span>
+        </button>
       </div>
 
       {/* Stat Cards - Compact */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Card
-              key={card.label}
-              className="shadow-sm border"
-              style={{ borderColor: card.border }}
+      {cardsLoading ? (
+        <div
+          className="grid grid-cols-2 lg:grid-cols-4 gap-2.5"
+          data-ocid="dashboard.loading_state"
+        >
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="rounded-lg border bg-white p-3 shadow-sm animate-pulse"
             >
-              <CardContent className="p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-gray-500 font-medium">
-                      {card.label}
-                    </p>
-                    <span
-                      className="text-xl font-bold mt-0.5 block"
-                      style={{ color: card.color }}
+              <div className="h-3 bg-gray-200 rounded w-3/4 mb-2" />
+              <div className="h-6 bg-gray-200 rounded w-1/3" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {cards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <Card
+                key={card.label}
+                className="shadow-sm border"
+                style={{ borderColor: card.border }}
+              >
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium">
+                        {card.label}
+                      </p>
+                      <span
+                        className="text-xl font-bold mt-0.5 block"
+                        style={{ color: card.color }}
+                      >
+                        {card.value}
+                      </span>
+                    </div>
+                    <div
+                      className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      style={{ background: card.bg }}
                     >
-                      {card.value}
-                    </span>
+                      <Icon className="w-4 h-4" style={{ color: card.color }} />
+                    </div>
                   </div>
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center"
-                    style={{ background: card.bg }}
-                  >
-                    <Icon className="w-4 h-4" style={{ color: card.color }} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {/* E-Verification Deadline Alert - HIGH PRIORITY */}
       {highEVerifAlerts.length > 0 && (

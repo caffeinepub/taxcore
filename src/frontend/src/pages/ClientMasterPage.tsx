@@ -90,6 +90,8 @@ export default function ClientMasterPage({
   onViewClient,
   currentUserId,
 }: Props) {
+  const currentUser = storage.getCurrentUser();
+  const TRIAL_LIMIT = 5;
   const [search, setSearch] = useState("");
   const [filterYear, setFilterYear] = useState("All");
   const [showForm, setShowForm] = useState(false);
@@ -98,6 +100,7 @@ export default function ClientMasterPage({
   const [refreshKey, setRefreshKey] = useState(0);
   const [alertDismissed, setAlertDismissed] = useState(false);
   const [alertClients, setAlertClients] = useState(() => getDueAlertClients());
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   useEffect(() => {
     setAlertClients(getDueAlertClients());
@@ -142,6 +145,18 @@ export default function ClientMasterPage({
   };
 
   const openAdd = () => {
+    // Trial limit check
+    if (currentUser?.accessType === "Trial") {
+      const ownerClients = storage.getClients().filter((c) => {
+        return currentUser.role === "Owner"
+          ? true // owner sees all; limit applies to firm total
+          : c.createdBy === currentUser.id;
+      });
+      if (ownerClients.length >= TRIAL_LIMIT) {
+        setShowUpgradeModal(true);
+        return;
+      }
+    }
     setEditClient(null);
     setForm({
       name: "",
@@ -831,6 +846,40 @@ export default function ClientMasterPage({
                 Cancel
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Trial Upgrade Dialog */}
+      <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
+        <DialogContent className="max-w-sm" data-ocid="trial.dialog">
+          <DialogHeader>
+            <DialogTitle style={{ color: "var(--theme-primary, #6B1A2B)" }}>
+              Trial Limit Reached
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div className="flex flex-col items-center gap-3 py-2">
+              <div className="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center">
+                <AlertTriangle className="w-7 h-7 text-amber-600" />
+              </div>
+              <p className="text-sm text-gray-700 text-center">
+                You&apos;ve reached the <strong>5 client limit</strong> for the
+                Trial plan.
+              </p>
+              <p className="text-xs text-gray-500 text-center">
+                Contact your Administrator to upgrade to the{" "}
+                <strong>Full plan</strong> for unlimited clients.
+              </p>
+            </div>
+            <Button
+              onClick={() => setShowUpgradeModal(false)}
+              className="w-full text-white"
+              style={{ background: "var(--theme-primary, #6B1A2B)" }}
+              data-ocid="trial.close_button"
+            >
+              OK, Got It
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

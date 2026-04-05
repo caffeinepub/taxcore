@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { storage } from "../data/storage";
+import { storage, whenInitialized } from "../data/storage";
 import type { User } from "../types";
 
 interface LoginPageProps {
@@ -245,14 +245,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Check if Super Admin exists on mount.
+  // Wait for canister data to load first (whenInitialized) to avoid false-positive setup screens.
   // If not, silently redirect to the hidden SA setup view.
   // Owners never see any reference to this -- the setup page has no links back visible.
   useEffect(() => {
-    const users = storage.getUsers();
-    const hasSuperAdmin = users.some((u) => u.role === "Super Admin");
-    if (!hasSuperAdmin && !storage.isSuperAdminCreated()) {
-      setView("super-admin-setup");
-    }
+    whenInitialized().then(() => {
+      const users = storage.getUsers();
+      const hasSuperAdmin = users.some((u) => u.role === "Super Admin");
+      if (!hasSuperAdmin && !storage.isSuperAdminCreated()) {
+        setView("super-admin-setup");
+      }
+    });
   }, []);
 
   // Countdown timer for OTP resend

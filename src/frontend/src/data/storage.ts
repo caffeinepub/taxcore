@@ -1,3 +1,15 @@
+/**
+ * storage.ts
+ *
+ * Hybrid storage layer for TaxCore.
+ * - In-memory cache for instant synchronous reads (same API as before)
+ * - localStorage for offline/fast fallback cache
+ * - ICP canister for permanent cross-device persistence
+ *
+ * API surface is 100% backward-compatible with previous localStorage-only version.
+ * New additions: initialize() and whenInitialized() for async startup sync.
+ */
+
 import type {
   AuditLogEntry,
   Billing,
@@ -9,6 +21,16 @@ import type {
   WhatsAppSettings,
   WorkProcessing,
 } from "../types";
+import {
+  buildClientIdMap,
+  canisterAddLog,
+  canisterSaveBilling,
+  canisterSaveClients,
+  canisterSaveDocuments,
+  canisterSaveWork,
+  loadAllFromCanister,
+  saveUserDatabase,
+} from "./canisterDb";
 
 const KEYS = {
   users: "taxcore_users",
@@ -24,7 +46,40 @@ const KEYS = {
   notificationLogs: "taxcore_notification_logs",
 };
 
-function get<T>(key: string): T[] {
+// ─── In-memory cache ───────────────────────────────────────────────────────────
+
+const cache: {
+  users: User[];
+  clients: Client[];
+  documents: DocumentInward[];
+  work: WorkProcessing[];
+  billing: Billing[];
+  firmAccounts: FirmAccount[];
+  auditLogs: AuditLogEntry[];
+  notificationLogs: NotificationLog[];
+  superAdminCreated: boolean;
+  whatsappSettings: WhatsAppSettings | null;
+} = {
+  users: [],
+  clients: [],
+  documents: [],
+  work: [],
+  billing: [],
+  firmAccounts: [],
+  auditLogs: [],
+  notificationLogs: [],
+  superAdminCreated: false,
+  whatsappSettings: null,
+};
+
+// ─── Initialization state ────────────────────────────────────────────────────
+
+let initPromise: Promise<void> | null = null;
+let isInitialized = false;
+
+// ─── localStorage helpers (cache layer) ──────────────────────────────────────
+
+function lsGet<T>(key: string): T[] {
   try {
     return JSON.parse(localStorage.getItem(key) || "[]") as T[];
   } catch {
@@ -32,24 +87,226 @@ function get<T>(key: string): T[] {
   }
 }
 
-function set<T>(key: string, data: T[]): void {
+function lsSet<T>(key: string, data: T[]): void {
   localStorage.setItem(key, JSON.stringify(data));
-  // Dispatch a custom event so subscribed components can react
-  window.dispatchEvent(
-    new CustomEvent("taxcore-storage-change", { detail: { key } }),
-  );
 }
 
 function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
+// ─── Load cache from localStorage ─────────────────────────────────────────────
+
+function loadCacheFromLocalStorage(): void {
+  cache.users = lsGet<User>(KEYS.users);
+  cache.clients = lsGet<Client>(KEYS.clients);
+  cache.documents = lsGet<DocumentInward>(KEYS.documents);
+  cache.work = lsGet<WorkProcessing>(KEYS.work);
+  cache.billing = lsGet<Billing>(KEYS.billing);
+  cache.firmAccounts = lsGet<FirmAccount>(KEYS.firmAccounts);
+  cache.auditLogs = lsGet<AuditLogEntry>(KEYS.auditLogs);
+  cache.notificationLogs = lsGet<NotificationLog>(KEYS.notificationLogs);
+  cache.superAdminCreated =
+    localStorage.getItem(KEYS.superAdminCreated) === "true";
+  try {
+    const raw = localStorage.getItem(KEYS.whatsappSettings);
+    cache.whatsappSettings = raw ? (JSON.parse(raw) as WhatsAppSettings) : null;
+  } catch {
+    cache.whatsappSettings = null;
+  }
+}
+
+// ─── Dispatch change event ───────────────────────────────────────────────────
+
+function dispatchChange(key?: string): void {
+  window.dispatchEvent(
+    new CustomEvent("taxcore-storage-change", { detail: { key } }),
+  );
+}
+
+// ─── Write-through helper with background canister sync ────────────────────────
+// Writes to cache + localStorage immediately, dispatches change event,
+// then syncs to canister in background (fire-and-forget with retry)
+
+function bgSync(
+  syncFn: () => Promise<void>,
+  description: string,
+  retries = 2,
+): void {
+  const attempt = (remaining: number) => {
+    syncFn().catch((err) => {
+      console.warn(`[storage] canister sync failed (${description}):`, err);
+      if (remaining > 0) {
+        setTimeout(() => attempt(remaining - 1), 3000);
+      }
+    });
+  };
+  attempt(retries);
+}
+
+// ─── Main initialize function ──────────────────────────────────────────────────
+
+/**
+ * Loads all data from the ICP canister into memory.
+ * Falls back gracefully to localStorage data if canister is unavailable.
+ * Call once on app startup. Returns immediately if already called.
+ */
+export async function initialize(): Promise<void> {
+  if (initPromise) return initPromise;
+
+  initPromise = (async () => {
+    // First load localStorage so we have something immediately
+    loadCacheFromLocalStorage();
+
+    try {
+      // Load all data from canister in parallel
+      const canisterData = await loadAllFromCanister();
+
+      // Merge canister data into cache
+      // Canister data wins if it has content (it's the source of truth)
+
+      // User database
+      if (canisterData.userDb) {
+        if (canisterData.userDb.users && canisterData.userDb.users.length > 0) {
+          cache.users = canisterData.userDb.users;
+          lsSet(KEYS.users, cache.users);
+        }
+        if (
+          canisterData.userDb.firmAccounts &&
+          canisterData.userDb.firmAccounts.length > 0
+        ) {
+          cache.firmAccounts = canisterData.userDb.firmAccounts;
+          lsSet(KEYS.firmAccounts, cache.firmAccounts);
+        }
+        if (canisterData.userDb.superAdminCreated) {
+          cache.superAdminCreated = true;
+          localStorage.setItem(KEYS.superAdminCreated, "true");
+        }
+        if (canisterData.userDb.whatsAppSettings) {
+          cache.whatsappSettings = canisterData.userDb.whatsAppSettings ?? null;
+          if (cache.whatsappSettings) {
+            localStorage.setItem(
+              KEYS.whatsappSettings,
+              JSON.stringify(cache.whatsappSettings),
+            );
+          }
+        }
+      }
+
+      // Also check if users array in canister has a super admin
+      // (in case the flag wasn't set but users exist)
+      const hasSuperAdmin = cache.users.some((u) => u.role === "Super Admin");
+      if (hasSuperAdmin) {
+        cache.superAdminCreated = true;
+        localStorage.setItem(KEYS.superAdminCreated, "true");
+      }
+
+      // Clients — canister data overrides localStorage if canister has data
+      if (canisterData.clients.length > 0) {
+        cache.clients = canisterData.clients;
+        lsSet(KEYS.clients, cache.clients);
+      }
+
+      // Documents
+      if (canisterData.documents.length > 0) {
+        cache.documents = canisterData.documents;
+        lsSet(KEYS.documents, cache.documents);
+      }
+
+      // Work
+      if (canisterData.work.length > 0) {
+        cache.work = canisterData.work;
+        lsSet(KEYS.work, cache.work);
+      }
+
+      // Billing
+      if (canisterData.billing.length > 0) {
+        cache.billing = canisterData.billing;
+        lsSet(KEYS.billing, cache.billing);
+      }
+
+      // Audit logs — merge (canister might have more)
+      if (canisterData.auditLogs.length > 0) {
+        // Merge: use canister logs, supplemented by any local-only logs
+        const canisterIds = new Set(canisterData.auditLogs.map((l) => l.id));
+        const localOnly = cache.auditLogs.filter((l) => !canisterIds.has(l.id));
+        cache.auditLogs = [...canisterData.auditLogs, ...localOnly];
+        lsSet(KEYS.auditLogs, cache.auditLogs);
+      }
+
+      console.log("[storage] Initialized from canister:", {
+        users: cache.users.length,
+        clients: cache.clients.length,
+        documents: cache.documents.length,
+        work: cache.work.length,
+        billing: cache.billing.length,
+        auditLogs: cache.auditLogs.length,
+      });
+    } catch (err) {
+      console.warn(
+        "[storage] Canister load failed, using localStorage cache:",
+        err,
+      );
+    }
+
+    isInitialized = true;
+    dispatchChange("init");
+  })();
+
+  return initPromise;
+}
+
+/**
+ * Returns a promise that resolves when storage is fully initialized from canister.
+ * If initialize() was never called, it calls it automatically.
+ */
+export async function whenInitialized(): Promise<void> {
+  if (isInitialized) return;
+  return initialize();
+}
+
+/**
+ * Forces a fresh reload from the canister, replacing cached data.
+ * Safe to call at any time. Returns when done.
+ */
+export async function refreshFromCanister(): Promise<void> {
+  // Reset so initialize() runs again
+  initPromise = null;
+  isInitialized = false;
+  return initialize();
+}
+
+// ─── Public storage API (same signatures as before) ───────────────────────────
+
 export const storage = {
   uid,
 
-  // Users
-  getUsers: (): User[] => get<User>(KEYS.users),
-  saveUsers: (users: User[]) => set(KEYS.users, users),
+  // ─── Users ───────────────────────────────────────────────────────────────
+
+  getUsers: (): User[] => cache.users,
+
+  saveUsers: (users: User[]): void => {
+    cache.users = users;
+    lsSet(KEYS.users, users);
+    // Check if super admin was created
+    const hasSA = users.some((u) => u.role === "Super Admin");
+    if (hasSA) {
+      cache.superAdminCreated = true;
+      localStorage.setItem(KEYS.superAdminCreated, "true");
+    }
+    dispatchChange(KEYS.users);
+    // Sync user database to canister
+    bgSync(async () => {
+      const db = {
+        users: cache.users,
+        firmAccounts: cache.firmAccounts,
+        superAdminCreated: cache.superAdminCreated,
+        whatsAppSettings: cache.whatsappSettings,
+      };
+      await saveUserDatabase(db);
+    }, "saveUsers");
+  },
+
   getCurrentUser: (): User | null => {
     try {
       return JSON.parse(localStorage.getItem(KEYS.currentUser) || "null");
@@ -57,99 +314,170 @@ export const storage = {
       return null;
     }
   },
-  setCurrentUser: (user: User | null) => {
+
+  setCurrentUser: (user: User | null): void => {
     if (user) localStorage.setItem(KEYS.currentUser, JSON.stringify(user));
     else localStorage.removeItem(KEYS.currentUser);
   },
 
-  // Super Admin flag
+  // ─── Super Admin flag ─────────────────────────────────────────────────────
+
   isSuperAdminCreated: (): boolean => {
-    return localStorage.getItem(KEYS.superAdminCreated) === "true";
+    // Check both in-memory flag AND users array
+    return (
+      cache.superAdminCreated ||
+      cache.users.some((u) => u.role === "Super Admin")
+    );
   },
-  markSuperAdminCreated: () => {
+
+  markSuperAdminCreated: (): void => {
+    cache.superAdminCreated = true;
     localStorage.setItem(KEYS.superAdminCreated, "true");
+    // Sync user DB to canister
+    bgSync(async () => {
+      const db = {
+        users: cache.users,
+        firmAccounts: cache.firmAccounts,
+        superAdminCreated: true,
+        whatsAppSettings: cache.whatsappSettings,
+      };
+      await saveUserDatabase(db);
+    }, "markSuperAdminCreated");
   },
 
-  // Firm Accounts (managed by Super Admin)
-  getFirmAccounts: (): FirmAccount[] => get<FirmAccount>(KEYS.firmAccounts),
-  saveFirmAccounts: (accounts: FirmAccount[]) =>
-    set(KEYS.firmAccounts, accounts),
+  // ─── Firm Accounts ───────────────────────────────────────────────────────
 
-  // Clients
-  getClients: (): Client[] => get<Client>(KEYS.clients),
-  saveClients: (clients: Client[]) => set(KEYS.clients, clients),
+  getFirmAccounts: (): FirmAccount[] => cache.firmAccounts,
 
-  // Documents
-  getDocuments: (): DocumentInward[] => get<DocumentInward>(KEYS.documents),
-  saveDocuments: (docs: DocumentInward[]) => set(KEYS.documents, docs),
+  saveFirmAccounts: (accounts: FirmAccount[]): void => {
+    cache.firmAccounts = accounts;
+    lsSet(KEYS.firmAccounts, accounts);
+    dispatchChange(KEYS.firmAccounts);
+    bgSync(async () => {
+      const db = {
+        users: cache.users,
+        firmAccounts: accounts,
+        superAdminCreated: cache.superAdminCreated,
+        whatsAppSettings: cache.whatsappSettings,
+      };
+      await saveUserDatabase(db);
+    }, "saveFirmAccounts");
+  },
 
-  // Work
-  getWork: (): WorkProcessing[] => get<WorkProcessing>(KEYS.work),
-  saveWork: (work: WorkProcessing[]) => set(KEYS.work, work),
+  // ─── Clients ───────────────────────────────────────────────────────────────
 
-  // Billing
-  getBilling: (): Billing[] => get<Billing>(KEYS.billing),
-  saveBilling: (billing: Billing[]) => set(KEYS.billing, billing),
+  getClients: (): Client[] => cache.clients,
 
-  // Audit Logs
-  getAuditLogs: (): AuditLogEntry[] => get<AuditLogEntry>(KEYS.auditLogs),
+  saveClients: (clients: Client[]): void => {
+    cache.clients = clients;
+    lsSet(KEYS.clients, clients);
+    dispatchChange(KEYS.clients);
+    bgSync(async () => {
+      await canisterSaveClients(clients);
+    }, "saveClients");
+  },
+
+  // ─── Documents ────────────────────────────────────────────────────────────
+
+  getDocuments: (): DocumentInward[] => cache.documents,
+
+  saveDocuments: (docs: DocumentInward[]): void => {
+    cache.documents = docs;
+    lsSet(KEYS.documents, docs);
+    dispatchChange(KEYS.documents);
+    bgSync(async () => {
+      const clientIdMap = await buildClientIdMap();
+      await canisterSaveDocuments(docs, clientIdMap);
+    }, "saveDocuments");
+  },
+
+  // ─── Work Processing ───────────────────────────────────────────────────────
+
+  getWork: (): WorkProcessing[] => cache.work,
+
+  saveWork: (work: WorkProcessing[]): void => {
+    cache.work = work;
+    lsSet(KEYS.work, work);
+    dispatchChange(KEYS.work);
+    bgSync(async () => {
+      const clientIdMap = await buildClientIdMap();
+      await canisterSaveWork(work, clientIdMap);
+    }, "saveWork");
+  },
+
+  // ─── Billing ───────────────────────────────────────────────────────────────
+
+  getBilling: (): Billing[] => cache.billing,
+
+  saveBilling: (billing: Billing[]): void => {
+    cache.billing = billing;
+    lsSet(KEYS.billing, billing);
+    dispatchChange(KEYS.billing);
+    bgSync(async () => {
+      const clientIdMap = await buildClientIdMap();
+      await canisterSaveBilling(billing, clientIdMap);
+    }, "saveBilling");
+  },
+
+  // ─── Audit Logs ───────────────────────────────────────────────────────────
+
+  getAuditLogs: (): AuditLogEntry[] => cache.auditLogs,
+
   addAuditLog: (entry: AuditLogEntry): void => {
-    const logs = get<AuditLogEntry>(KEYS.auditLogs);
-    logs.push(entry);
-    localStorage.setItem(KEYS.auditLogs, JSON.stringify(logs));
-    window.dispatchEvent(
-      new CustomEvent("taxcore-storage-change", {
-        detail: { key: KEYS.auditLogs },
-      }),
+    cache.auditLogs.push(entry);
+    lsSet(KEYS.auditLogs, cache.auditLogs);
+    dispatchChange(KEYS.auditLogs);
+    // Add to canister asynchronously
+    bgSync(
+      async () => {
+        await canisterAddLog(entry);
+      },
+      "addAuditLog",
+      0, // no retry for logs
     );
   },
+
   clearAuditLogs: (): void => {
-    localStorage.setItem(KEYS.auditLogs, JSON.stringify([]));
-    window.dispatchEvent(
-      new CustomEvent("taxcore-storage-change", {
-        detail: { key: KEYS.auditLogs },
-      }),
-    );
+    cache.auditLogs = [];
+    lsSet(KEYS.auditLogs, []);
+    dispatchChange(KEYS.auditLogs);
+    // Note: canister doesn't expose a deleteActivityLog API, so canister logs persist
+    // but local display will be cleared
   },
 
-  // WhatsApp Settings
-  getWhatsAppSettings: (): WhatsAppSettings | null => {
-    try {
-      const raw = localStorage.getItem(KEYS.whatsappSettings);
-      return raw ? (JSON.parse(raw) as WhatsAppSettings) : null;
-    } catch {
-      return null;
-    }
-  },
+  // ─── WhatsApp Settings ────────────────────────────────────────────────────
+
+  getWhatsAppSettings: (): WhatsAppSettings | null => cache.whatsappSettings,
+
   saveWhatsAppSettings: (settings: WhatsAppSettings): void => {
+    cache.whatsappSettings = settings;
     localStorage.setItem(KEYS.whatsappSettings, JSON.stringify(settings));
-    window.dispatchEvent(
-      new CustomEvent("taxcore-storage-change", {
-        detail: { key: KEYS.whatsappSettings },
-      }),
-    );
+    dispatchChange(KEYS.whatsappSettings);
+    bgSync(async () => {
+      const db = {
+        users: cache.users,
+        firmAccounts: cache.firmAccounts,
+        superAdminCreated: cache.superAdminCreated,
+        whatsAppSettings: settings,
+      };
+      await saveUserDatabase(db);
+    }, "saveWhatsAppSettings");
   },
 
-  // Notification Logs
-  getNotificationLogs: (): NotificationLog[] =>
-    get<NotificationLog>(KEYS.notificationLogs),
+  // ─── Notification Logs ─────────────────────────────────────────────────────
+
+  getNotificationLogs: (): NotificationLog[] => cache.notificationLogs,
+
   addNotificationLog: (entry: NotificationLog): void => {
-    const logs = get<NotificationLog>(KEYS.notificationLogs);
-    logs.push(entry);
-    localStorage.setItem(KEYS.notificationLogs, JSON.stringify(logs));
-    window.dispatchEvent(
-      new CustomEvent("taxcore-storage-change", {
-        detail: { key: KEYS.notificationLogs },
-      }),
-    );
+    cache.notificationLogs.push(entry);
+    lsSet(KEYS.notificationLogs, cache.notificationLogs);
+    dispatchChange(KEYS.notificationLogs);
   },
+
   clearNotificationLogs: (): void => {
-    localStorage.setItem(KEYS.notificationLogs, JSON.stringify([]));
-    window.dispatchEvent(
-      new CustomEvent("taxcore-storage-change", {
-        detail: { key: KEYS.notificationLogs },
-      }),
-    );
+    cache.notificationLogs = [];
+    lsSet(KEYS.notificationLogs, []);
+    dispatchChange(KEYS.notificationLogs);
   },
 };
 
@@ -229,7 +557,6 @@ export function getClientBilling(clientId: string): Billing | null {
 
 /**
  * Checks if a client's work record is E-Verified (stop-gate).
- * Checks both `eVerified === true` AND `filingStatus === 'E-Verified'`.
  */
 export function isClientEVerified(clientId: string): boolean {
   const work = getClientWork(clientId);
@@ -269,9 +596,6 @@ export function getDueAlertClients(): Array<{
 
 /**
  * Enhanced deadline alert function with role-based scoping and urgency tiers.
- * - daysLeft < 0: YELLOW (overdue)
- * - daysLeft 0-5: RED (critical)
- * - daysLeft 6-10: AMBER (warning)
  */
 export function getDeadlineAlertClients(
   userId: string,
@@ -284,7 +608,6 @@ export function getDeadlineAlertClients(
 }> {
   const allClients = storage.getClients();
 
-  // Apply role-based scoping
   const scopedClients =
     userRole === "Staff"
       ? allClients.filter((c) => c.createdBy === userId)
@@ -298,17 +621,12 @@ export function getDeadlineAlertClients(
   }> = [];
 
   for (const c of scopedClients) {
-    // Stop-gate: exclude e-verified clients
     if (isClientEVerified(c.id)) continue;
-
     const daysLeft = getDaysUntilDue(c.dueDate);
     if (daysLeft === null || daysLeft > 10) continue;
-
     const work = getClientWork(c.id);
-    // Yellow = overdue (negative), Red = 0-5, Amber = 6-10
     const urgency: "red" | "amber" | "yellow" =
       daysLeft < 0 ? "yellow" : daysLeft <= 5 ? "red" : "amber";
-
     result.push({
       client: c,
       daysLeft,
@@ -322,7 +640,6 @@ export function getDeadlineAlertClients(
 
 /**
  * Returns work records with filing status 'Pending for E-verification'.
- * E-verification deadline = filing date + 30 days.
  */
 export function getEVerificationAlerts(): Array<{
   client: Client;
@@ -346,23 +663,16 @@ export function getEVerificationAlerts(): Array<{
     const fs = getFilingStatus(w);
     if (fs !== "Pending for E-verification") continue;
     if (!w.filingDate) continue;
-
     const filingDt = parseDDMMYYYY(w.filingDate);
     if (!filingDt) continue;
-
-    // E-verification deadline = filing date + 30 days
     const deadline = new Date(filingDt.getTime() + 30 * 24 * 60 * 60 * 1000);
     deadline.setHours(0, 0, 0, 0);
     const daysToDeadline = Math.floor(
       (deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
     );
-
-    // Only include if within 30 days of deadline
     if (daysToDeadline > 30) continue;
-
     const client = allClients.find((c) => c.id === w.clientId);
     if (!client) continue;
-
     result.push({
       client,
       work: w,
@@ -416,8 +726,6 @@ export function queueDueDateNotifications(_currentUser: {
 
 // Seed sample data only - no hardcoded users
 export function seedData() {
-  // Only seed sample clients/work/docs if an Owner user already exists
-  // and no clients have been created yet
   const users = storage.getUsers();
   const ownerUser = users.find((u) => u.role === "Owner");
   if (!ownerUser) return;
@@ -453,7 +761,7 @@ export function seedData() {
     createdAt: new Date().toISOString(),
     createdBy: ownerUser.id,
   };
-  localStorage.setItem(KEYS.clients, JSON.stringify([c1, c2]));
+  storage.saveClients([c1, c2]);
 
   const work: WorkProcessing[] = [
     {
@@ -479,7 +787,7 @@ export function seedData() {
       updatedAt: new Date().toISOString(),
     },
   ];
-  localStorage.setItem(KEYS.work, JSON.stringify(work));
+  storage.saveWork(work);
 
   const docs: DocumentInward[] = [
     {
@@ -492,7 +800,7 @@ export function seedData() {
       createdAt: new Date().toISOString(),
     },
   ];
-  localStorage.setItem(KEYS.documents, JSON.stringify(docs));
+  storage.saveDocuments(docs);
 
   const billing: Billing[] = [
     {
@@ -516,7 +824,7 @@ export function seedData() {
       updatedAt: new Date().toISOString(),
     },
   ];
-  localStorage.setItem(KEYS.billing, JSON.stringify(billing));
+  storage.saveBilling(billing);
 }
 
 /**
@@ -529,3 +837,6 @@ export function getHeadOfIncome(client: import("../types").Client): string {
   if (legacy === "Other") return "Salaried";
   return legacy || "Salaried";
 }
+
+// Load cache from localStorage on module import so reads are instant
+loadCacheFromLocalStorage();

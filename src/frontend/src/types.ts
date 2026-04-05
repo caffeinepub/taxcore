@@ -15,6 +15,7 @@ export interface User {
   role: UserRole;
   isActive?: boolean; // for Owner accounts controlled by Super Admin
   accessType?: "Trial" | "Full"; // for Owner accounts
+  firmOwnerId?: string; // for Staff: the ID of the Owner who created them
 }
 
 export interface FirmAccount {
