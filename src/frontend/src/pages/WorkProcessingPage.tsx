@@ -148,8 +148,11 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
       .map((w) => {
         const client = clients.find((c) => c.id === w.clientId);
         const fs = getFilingStatus(w);
+        // Normalize legacy "Filed" to "Completed" for display
+        const displayStatus = w.status === "Filed" ? "Completed" : w.status;
         return {
           ...w,
+          status: displayStatus as WorkProcessing["status"],
           filingStatusDerived: fs,
           clientName: client?.name || "-",
           pan: client?.pan || "-",
@@ -204,6 +207,22 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
         timestamp: new Date().toISOString(),
       });
     }
+  };
+
+  const handleStatusChange = (workId: string, newStatus: string) => {
+    const allWork = storage.getWork();
+    const work = allWork.find((w) => w.id === workId);
+    if (!work) return;
+    const oldStatus = work.status === "Filed" ? "Completed" : work.status;
+    if (oldStatus === newStatus) return;
+    updateWork(
+      workId,
+      { status: newStatus as WorkProcessing["status"] },
+      "Work Status",
+      oldStatus,
+      newStatus,
+    );
+    toast.success(`Work status updated to: ${newStatus}`);
   };
 
   const handleFilingStatusChange = (
@@ -322,7 +341,7 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
             <SelectItem value="All">All Status</SelectItem>
             <SelectItem value="Pending">Pending</SelectItem>
             <SelectItem value="In Progress">In Progress</SelectItem>
-            <SelectItem value="Filed">Filed</SelectItem>
+            <SelectItem value="Completed">Completed</SelectItem>
           </SelectContent>
         </Select>
         <Select value={filterYear} onValueChange={setFilterYear}>
@@ -384,17 +403,34 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
                 <td className="py-2.5 px-3 font-mono text-xs">{row.pan}</td>
                 <td className="py-2.5 px-3 text-xs">{row.taxYear}</td>
                 <td className="py-2.5 px-3">
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      row.status === "Filed"
-                        ? "bg-green-100 text-green-700"
-                        : row.status === "In Progress"
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-orange-100 text-orange-700"
-                    }`}
+                  <Select
+                    value={row.status}
+                    onValueChange={(v) => handleStatusChange(row.id, v)}
                   >
-                    {row.status}
-                  </span>
+                    <SelectTrigger
+                      className={`h-7 text-xs w-32 ${
+                        row.status === "Completed"
+                          ? "bg-green-100 text-green-700 border-green-200"
+                          : row.status === "In Progress"
+                            ? "bg-blue-100 text-blue-700 border-blue-200"
+                            : "bg-orange-100 text-orange-700 border-orange-200"
+                      }`}
+                      data-ocid={`work.status.${i + 1}`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Pending" className="text-xs">
+                        Pending
+                      </SelectItem>
+                      <SelectItem value="In Progress" className="text-xs">
+                        In Progress
+                      </SelectItem>
+                      <SelectItem value="Completed" className="text-xs">
+                        Completed
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </td>
 
                 {/* ITR Form - inline editable dropdown */}
@@ -427,21 +463,12 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
                   />
                 </td>
 
-                {/* Filing Date - locked if ack number is 15 digits */}
+                {/* Filing Date - always locked, auto-filled from Ack No */}
                 <td className="py-2.5 px-3">
-                  {row.hasAck ? (
-                    <div
-                      className="flex items-center gap-1 text-xs font-mono text-gray-700"
-                      title="Auto-filled from Acknowledgement Number (last 6 digits)"
-                    >
-                      <Lock className="w-3 h-3 text-gray-400 shrink-0" />
-                      <span>{row.filingDate || "-"}</span>
-                    </div>
-                  ) : (
-                    <span className="text-xs text-gray-400 italic">
-                      {row.filingDate || "Enter Ack No."}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1 text-xs font-mono text-gray-700">
+                    <Lock className="w-3 h-3 text-gray-400 shrink-0" />
+                    <span>{row.filingDate || "\u2014"}</span>
+                  </div>
                 </td>
 
                 {/* Filing Status - restricted to post-filing options when ack exists */}

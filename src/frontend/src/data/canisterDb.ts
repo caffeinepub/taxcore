@@ -501,7 +501,9 @@ function canisterToWork(
     id: extra?.frontendId ?? bigintToId(w.id),
     clientId: extra?.frontendClientId ?? frontendClientId,
     taxYear: extra?.taxYear ?? w.dueDateOfFiling ?? "",
-    status: (extra?.status as "Pending" | "In Progress" | "Filed") ?? "Pending",
+    status:
+      (extra?.status as "Pending" | "In Progress" | "Completed" | "Filed") ??
+      "Pending",
     itrForm: extra?.itrForm ?? "",
     returnType: extra?.returnType as
       | "Original"

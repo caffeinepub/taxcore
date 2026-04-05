@@ -132,16 +132,15 @@ export default function ClientDetailPage({ client, onBack }: Props) {
     if (digits.length === 15) {
       const derived = deriveFilingDateFromAck(digits);
       if (derived) {
-        // Auto-fill filing date and default filing status to "Pending for E-verification"
+        // Auto-fill filing date and upgrade filing status unless already E-Verified
         setWorkForm((f) => ({
           ...f,
           ackNumber: digits,
           filingDate: derived,
-          // Only upgrade status if currently Pending (don't downgrade E-Verified)
           filingStatus:
-            f.filingStatus === "Pending"
-              ? "Pending for E-verification"
-              : f.filingStatus,
+            f.filingStatus === "E-Verified"
+              ? "E-Verified"
+              : "Pending for E-verification",
         }));
         setFilingDateLocked(true);
         return;
@@ -184,11 +183,10 @@ export default function ClientDetailPage({ client, onBack }: Props) {
       return setWorkError(
         "Acknowledgement Number must be exactly 15 numeric digits.",
       );
+    // Filing date is auto-derived from ack number (locked field) — only validate format, not future date
     if (workForm.filingDate) {
       if (!validateDate(workForm.filingDate))
         return setWorkError("Filing Date must be DD-MM-YYYY format.");
-      if (isDateInFuture(workForm.filingDate))
-        return setWorkError("Filing Date cannot be in the future.");
     }
 
     const allWork = storage.getWork();
@@ -495,7 +493,7 @@ export default function ClientDetailPage({ client, onBack }: Props) {
                 <SelectContent>
                   <SelectItem value="Pending">Pending</SelectItem>
                   <SelectItem value="In Progress">In Progress</SelectItem>
-                  <SelectItem value="Filed">Filed</SelectItem>
+                  <SelectItem value="Completed">Completed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -597,37 +595,22 @@ export default function ClientDetailPage({ client, onBack }: Props) {
               )}
             </div>
 
-            {/* Filing Date */}
+            {/* Filing Date - always locked, auto-filled from Ack No */}
             <div>
-              <Label>Filing Date (no future date)</Label>
-              {filingDateLocked ? (
-                <div
-                  className="mt-1 flex items-center gap-2 px-3 bg-gray-50 text-sm text-gray-700"
-                  style={{
-                    height: "36px",
-                    border: "1px solid #d1d5db",
-                    borderRadius: "6px",
-                  }}
-                >
-                  <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                  <span className="font-mono">
-                    {currentWork.filingDate || ""}
-                  </span>
-                  <span className="text-xs text-gray-400 ml-auto">
-                    Auto-filled from Ack No.
-                  </span>
-                </div>
-              ) : (
-                <DatePickerInput
-                  value={currentWork.filingDate || ""}
-                  onChange={(v) =>
-                    setWorkForm((f) => ({ ...f, filingDate: v }))
-                  }
-                  placeholder="DD-MM-YYYY"
-                  maxDate={today}
-                  className="mt-1"
-                />
-              )}
+              <Label>Filing Date</Label>
+              <div
+                className="mt-1 flex items-center gap-2 px-3 bg-gray-50 text-sm text-gray-700"
+                style={{
+                  height: "36px",
+                  border: "1px solid #d1d5db",
+                  borderRadius: "6px",
+                }}
+              >
+                <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                <span className="font-mono">
+                  {currentWork.filingDate || "—"}
+                </span>
+              </div>
             </div>
 
             {/* Filing Status */}

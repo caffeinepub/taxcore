@@ -12,10 +12,11 @@ import {
   CheckCircle,
   Clock,
   FileText,
+  FileX,
   MessageSquare,
   RefreshCw,
   ShieldAlert,
-  Truck,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -32,7 +33,7 @@ import {
   refreshFromCanister,
   storage,
 } from "../data/storage";
-import type { Client, User } from "../types";
+import type { Client, User, WorkProcessing } from "../types";
 import { getTaxYears } from "../utils/taxYears";
 
 const TAX_YEARS = ["All", ...getTaxYears()];
@@ -48,7 +49,11 @@ const WORK_STATUS_OPTIONS = [
     value: "In Progress",
     colorClass: "bg-blue-100 text-blue-700",
   },
-  { label: "Filed", value: "Filed", colorClass: "bg-green-100 text-green-700" },
+  {
+    label: "Completed",
+    value: "Completed",
+    colorClass: "bg-green-100 text-green-700",
+  },
 ];
 
 const DOC_STATUS_OPTIONS = [
@@ -83,17 +88,34 @@ function computeStats(taxYear: string, userId: string, userRole: string) {
 
   const recentClients = allClients.slice(-10).reverse();
 
+  // Pending Work = Work Status is Pending or In Progress
+  const pending = work.filter(
+    (w) => w.status === "Pending" || w.status === "In Progress",
+  ).length;
+
+  // Pending ITR Filed = Filing Status is Pending (return not yet filed)
+  const pendingITR = work.filter(
+    (w) => !w.filingStatus || w.filingStatus === "Pending",
+  ).length;
+
+  // ITR Filed = E-Verified + Pending for E-verification (return has been filed)
+  const itrFiled = work.filter(
+    (w) =>
+      w.filingStatus === "E-Verified" ||
+      w.filingStatus === "Pending for E-verification",
+  ).length;
+
+  // Pending for Verification = returns awaiting e-verification
+  const pendingForVerification = work.filter(
+    (w) => w.filingStatus === "Pending for E-verification",
+  ).length;
+
   return {
     total: clients.length,
-    pending: work.filter(
-      (w) => w.status === "Pending" || w.status === "In Progress",
-    ).length,
-    // ITR Filed = E-Verified + Pending for E-verification (return has been filed)
-    itrFiled: work.filter(
-      (w) =>
-        w.filingStatus === "E-Verified" ||
-        w.filingStatus === "Pending for E-verification",
-    ).length,
+    pending,
+    pendingITR,
+    itrFiled,
+    pendingForVerification,
     ready: billing.filter((b) => b.outwardStatus === "Ready").length,
     recentClients,
   };
@@ -166,7 +188,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
         w.id === work.id
           ? {
               ...w,
-              status: newVal as "Pending" | "In Progress" | "Filed",
+              status: newVal as WorkProcessing["status"],
               updatedAt: new Date().toISOString(),
             }
           : w,
@@ -269,7 +291,15 @@ export default function DashboardPage({ user }: DashboardPageProps) {
       border: "#FDE68A",
     },
     {
-      label: "ITR Filed",
+      label: "Pending ITR Filed",
+      value: stats.pendingITR,
+      icon: FileX,
+      color: "#EA580C",
+      bg: "#FFF7ED",
+      border: "#FED7AA",
+    },
+    {
+      label: "Completed",
       value: stats.itrFiled,
       icon: CheckCircle,
       color: "#16A34A",
@@ -277,12 +307,12 @@ export default function DashboardPage({ user }: DashboardPageProps) {
       border: "#BBF7D0",
     },
     {
-      label: "Ready for Delivery",
-      value: stats.ready,
-      icon: Truck,
-      color: "#7C3AED",
-      bg: "#F5F3FF",
-      border: "#DDD6FE",
+      label: "Pending for Verification",
+      value: stats.pendingForVerification,
+      icon: ShieldCheck,
+      color: "#4F46E5",
+      bg: "#EEF2FF",
+      border: "#C7D2FE",
     },
   ];
 
@@ -366,7 +396,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
             <div className="font-bold text-lg" style={{ color: "#16A34A" }}>
               {stats.itrFiled}
             </div>
-            <div className="text-gray-500">Filed</div>
+            <div className="text-gray-500">Completed</div>
           </div>
         </div>
       </div>
@@ -415,18 +445,18 @@ export default function DashboardPage({ user }: DashboardPageProps) {
             <RefreshCw className="w-3.5 h-3.5 text-gray-500" />
           )}
           <span className="text-gray-600">
-            {isRefreshing ? "Refreshing…" : "Refresh"}
+            {isRefreshing ? "Refreshing\u2026" : "Refresh"}
           </span>
         </button>
       </div>
 
-      {/* Stat Cards - Compact */}
+      {/* Stat Cards */}
       {cardsLoading ? (
         <div
-          className="grid grid-cols-2 lg:grid-cols-4 gap-2.5"
+          className="grid grid-cols-2 lg:grid-cols-5 gap-2.5"
           data-ocid="dashboard.loading_state"
         >
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2, 3, 4, 5].map((i) => (
             <div
               key={i}
               className="rounded-lg border bg-white p-3 shadow-sm animate-pulse"
@@ -437,7 +467,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5">
           {cards.map((card) => {
             const Icon = card.icon;
             return (
@@ -470,6 +500,26 @@ export default function DashboardPage({ user }: DashboardPageProps) {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* Data Consistency Alert: Pending ITR should not exceed Pending Work */}
+      {stats.pendingITR > stats.pending && (
+        <div
+          className="border border-l-4 rounded-lg p-3 bg-amber-50 border-amber-300 border-l-amber-500"
+          data-ocid="dashboard.consistency_alert.panel"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <span className="font-semibold text-amber-700 text-sm">
+              &#9888; Data Inconsistency Alert
+            </span>
+          </div>
+          <p className="text-xs text-amber-700 mt-1.5">
+            Pending ITR Filed ({stats.pendingITR}) cannot exceed Pending Work (
+            {stats.pending}). Please review Work Processing records to ensure
+            data accuracy.
+          </p>
         </div>
       )}
 
@@ -671,6 +721,12 @@ export default function DashboardPage({ user }: DashboardPageProps) {
                       : filingStatus === "Pending for E-verification"
                         ? "bg-blue-100 text-blue-700"
                         : "bg-orange-100 text-orange-700";
+                  // Normalize legacy "Filed" status to "Completed" for display
+                  const workStatusDisplay =
+                    work?.status === "Filed"
+                      ? "Completed"
+                      : work?.status || "Pending";
+                  const workStatusOptions = WORK_STATUS_OPTIONS;
                   return (
                     <tr
                       key={client.id}
@@ -690,7 +746,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
                             {work.itrForm}
                           </span>
                         ) : (
-                          <span className="text-xs text-gray-300">—</span>
+                          <span className="text-xs text-gray-300">\u2014</span>
                         )}
                       </td>
                       <td className="py-1.5 px-2">
@@ -699,7 +755,7 @@ export default function DashboardPage({ user }: DashboardPageProps) {
                             {work.returnType}
                           </span>
                         ) : (
-                          <span className="text-xs text-gray-300">—</span>
+                          <span className="text-xs text-gray-300">\u2014</span>
                         )}
                       </td>
                       <td className="py-1.5 px-2">
@@ -719,8 +775,8 @@ export default function DashboardPage({ user }: DashboardPageProps) {
                       </td>
                       <td className="py-1.5 px-2">
                         <InlineStatusCell
-                          value={work?.status || "Pending"}
-                          options={WORK_STATUS_OPTIONS}
+                          value={workStatusDisplay}
+                          options={workStatusOptions}
                           onSave={(newVal) =>
                             handleWorkStatusSave(client, newVal)
                           }

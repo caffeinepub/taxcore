@@ -68,7 +68,7 @@ export interface WorkProcessing {
   id: string;
   clientId: string;
   taxYear: string;
-  status: "Pending" | "In Progress" | "Filed";
+  status: "Pending" | "In Progress" | "Completed" | "Filed"; // "Filed" kept for backward compat
   itrForm: string;
   returnType?: "Original" | "Revised" | "Belated" | "Updated";
   remark?: string;

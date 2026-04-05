@@ -15,7 +15,8 @@ interface DeadlineBellProps {
 const WORKFLOW_STAGE_LABELS: Record<string, string> = {
   Pending: "Pending",
   "In Progress": "Processing",
-  Filed: "Filed",
+  Filed: "Completed",
+  Completed: "Completed",
 };
 
 export default function DeadlineBell({ user, onNavigate }: DeadlineBellProps) {

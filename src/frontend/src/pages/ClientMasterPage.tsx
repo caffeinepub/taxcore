@@ -56,7 +56,11 @@ const WORK_STATUS_OPTIONS = [
     value: "In Progress",
     colorClass: "bg-blue-100 text-blue-700",
   },
-  { label: "Filed", value: "Filed", colorClass: "bg-green-100 text-green-700" },
+  {
+    label: "Completed",
+    value: "Completed",
+    colorClass: "bg-green-100 text-green-700",
+  },
 ];
 
 const DOC_STATUS_OPTIONS = [
@@ -292,7 +296,7 @@ export default function ClientMasterPage({
   const handleWorkStatusSave = (client: Client, newVal: string) => {
     const work = getClientWork(client.id);
     if (!work) return;
-    const oldVal = work.status;
+    const oldVal = work.status === "Filed" ? "Completed" : work.status;
     if (oldVal === newVal) return;
 
     const allWork = storage.getWork();
@@ -301,7 +305,7 @@ export default function ClientMasterPage({
         w.id === work.id
           ? {
               ...w,
-              status: newVal as "Pending" | "In Progress" | "Filed",
+              status: newVal as WorkProcessing["status"],
               updatedAt: new Date().toISOString(),
             }
           : w,
@@ -515,6 +519,11 @@ export default function ClientMasterPage({
               const work = getClientWork(client.id);
               const docHasEntry = latestDoc !== "-";
               const headOfIncome = getClientHeadOfIncome(client);
+              // Normalize legacy "Filed" to "Completed" for display
+              const workStatusDisplay =
+                work?.status === "Filed"
+                  ? "Completed"
+                  : work?.status || "Pending";
               const alertRowClass =
                 days !== null && days < 0
                   ? "bg-yellow-50 border-l-4 border-l-yellow-400"
@@ -613,7 +622,7 @@ export default function ClientMasterPage({
                   </td>
                   <td className="py-2.5 px-3">
                     <InlineStatusCell
-                      value={work?.status || "Pending"}
+                      value={workStatusDisplay}
                       options={WORK_STATUS_OPTIONS}
                       onSave={(newVal) => handleWorkStatusSave(client, newVal)}
                     />
