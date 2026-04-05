@@ -244,18 +244,27 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Loading guard: show spinner until canister data is loaded and SA check is done
+  const [checkingAdmin, setCheckingAdmin] = useState(true);
+
   // Check if Super Admin exists on mount.
   // Wait for canister data to load first (whenInitialized) to avoid false-positive setup screens.
   // If not, silently redirect to the hidden SA setup view.
   // Owners never see any reference to this -- the setup page has no links back visible.
   useEffect(() => {
-    whenInitialized().then(() => {
-      const users = storage.getUsers();
-      const hasSuperAdmin = users.some((u) => u.role === "Super Admin");
-      if (!hasSuperAdmin && !storage.isSuperAdminCreated()) {
-        setView("super-admin-setup");
-      }
-    });
+    whenInitialized()
+      .then(() => {
+        const users = storage.getUsers();
+        const hasSuperAdmin = users.some((u) => u.role === "Super Admin");
+        if (!hasSuperAdmin && !storage.isSuperAdminCreated()) {
+          setView("super-admin-setup");
+        }
+        setCheckingAdmin(false);
+      })
+      .catch(() => {
+        // Even on canister error, proceed to login
+        setCheckingAdmin(false);
+      });
   }, []);
 
   // Countdown timer for OTP resend
@@ -1418,24 +1427,33 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   // ─── Active form selector ─────────────────────────────────────────────────────
 
-  const activeForm =
-    view === "super-admin-setup"
-      ? superAdminSetupContent
-      : view === "owner-signup"
-        ? ownerSignupContent
-        : view === "forgot-password"
-          ? forgotFormContent
-          : view === "otp-verify"
-            ? otpVerifyContent
-            : view === "new-password"
-              ? newPasswordContent
-              : loginFormContent;
+  const activeForm = checkingAdmin ? (
+    <div className="flex flex-col items-center justify-center min-h-full w-full px-6 py-6">
+      <div
+        className="w-7 h-7 rounded-full border-2 animate-spin"
+        style={{ borderColor: "#8B1A1A", borderTopColor: "transparent" }}
+      />
+      <p className="text-sm text-gray-400 mt-3">Checking account…</p>
+    </div>
+  ) : view === "super-admin-setup" ? (
+    superAdminSetupContent
+  ) : view === "owner-signup" ? (
+    ownerSignupContent
+  ) : view === "forgot-password" ? (
+    forgotFormContent
+  ) : view === "otp-verify" ? (
+    otpVerifyContent
+  ) : view === "new-password" ? (
+    newPasswordContent
+  ) : (
+    loginFormContent
+  );
 
   // ─── Page layout ──────────────────────────────────────────────────────────────
 
   return (
     <div
-      className="h-screen flex flex-col overflow-hidden"
+      className="min-h-screen flex flex-col"
       style={{ background: "#F7F4EE" }}
     >
       {/* ── Top Header ── */}
@@ -1521,9 +1539,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       </div>
 
       {/* ── Main two-column body ── */}
-      <main className="flex flex-1 flex-col md:flex-row overflow-hidden">
+      <main className="flex flex-1 flex-col md:flex-row">
         {/* Left: Workflow Flowchart */}
-        <div className="flex-1 flex items-center justify-center overflow-y-auto">
+        <div className="hidden md:flex flex-1 items-center justify-center overflow-y-auto">
           <WorkflowPanel />
         </div>
 

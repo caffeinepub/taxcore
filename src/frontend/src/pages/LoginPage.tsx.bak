@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { storage } from "../data/storage";
+import { storage, whenInitialized } from "../data/storage";
 import type { User } from "../types";
 
 interface LoginPageProps {
@@ -24,40 +24,40 @@ const workflowSteps = [
   {
     label: "Onboarding",
     desc: "Register firm & add clients",
-    color: "#a78bfa",
-    bg: "rgba(167,139,250,0.13)",
+    color: "#7A6FD4",
+    bg: "#EEF0F8",
     icon: "👤",
     num: 1,
   },
   {
     label: "Inward Docs",
     desc: "Track & update document receipt status",
-    color: "#60a5fa",
-    bg: "rgba(96,165,250,0.13)",
+    color: "#4A8FD4",
+    bg: "#EBF2FA",
     icon: "📄",
     num: 2,
   },
   {
     label: "Processing",
     desc: "Update work progress: Pending or Completed",
-    color: "#fb923c",
-    bg: "rgba(251,146,60,0.13)",
+    color: "#D4920A",
+    bg: "#FEF5E8",
     icon: "⚙️",
     num: 3,
   },
   {
     label: "Filing Status",
     desc: "Track ITR Filing and E-Verification",
-    color: "#f472b6",
-    bg: "rgba(244,114,182,0.13)",
+    color: "#D44070",
+    bg: "#FDF0F5",
     icon: "🗂️",
     num: 4,
   },
   {
     label: "Handover",
     desc: "Final documents ready & Invoicing",
-    color: "#4ade80",
-    bg: "rgba(74,222,128,0.13)",
+    color: "#3A9A3A",
+    bg: "#EEF8EE",
     icon: "🖨️",
     num: 5,
   },
@@ -80,37 +80,31 @@ function WorkflowPanel() {
               className="flex items-center gap-3 w-full rounded-xl px-3 py-2.5"
               style={{
                 background: step.bg,
-                border: `1.5px solid ${step.color}`,
+                border: `1.5px solid ${step.color}44`,
               }}
             >
               <div
                 className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-base font-bold"
                 style={{
-                  background: `${step.color}22`,
-                  border: `2px solid ${step.color}`,
-                  color: step.color,
-                  boxShadow: `0 0 8px ${step.color}44`,
+                  background: step.color,
+                  color: "#fff",
                 }}
               >
-                {step.icon}
+                {step.num}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span
-                    className="text-xs font-bold px-1.5 py-0.5 rounded"
-                    style={{
-                      background: step.color,
-                      color: "#fff",
-                      fontSize: 9,
-                    }}
+                    className="text-sm font-bold"
+                    style={{ color: "#2a2a2a" }}
                   >
-                    {step.num}
-                  </span>
-                  <span className="text-sm font-bold text-gray-800">
                     {step.label}
                   </span>
                 </div>
-                <p className="text-xs text-gray-500 mt-0.5 leading-tight">
+                <p
+                  className="text-xs mt-0.5 leading-tight"
+                  style={{ color: "#777" }}
+                >
                   {step.desc}
                 </p>
               </div>
@@ -251,14 +245,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Check if Super Admin exists on mount.
+  // Wait for canister data to load first (whenInitialized) to avoid false-positive setup screens.
   // If not, silently redirect to the hidden SA setup view.
   // Owners never see any reference to this -- the setup page has no links back visible.
   useEffect(() => {
-    const users = storage.getUsers();
-    const hasSuperAdmin = users.some((u) => u.role === "Super Admin");
-    if (!hasSuperAdmin && !storage.isSuperAdminCreated()) {
-      setView("super-admin-setup");
-    }
+    whenInitialized().then(() => {
+      const users = storage.getUsers();
+      const hasSuperAdmin = users.some((u) => u.role === "Super Admin");
+      if (!hasSuperAdmin && !storage.isSuperAdminCreated()) {
+        setView("super-admin-setup");
+      }
+    });
   }, []);
 
   // Countdown timer for OTP resend
@@ -539,14 +536,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <div className="mb-6 text-center">
           <div
             className="w-11 h-11 rounded-full flex items-center justify-center text-xl mx-auto mb-2"
-            style={{ background: "#7a1f2b", color: "#c9a44c" }}
+            style={{ background: "#8B1A1A", color: "#C9A84C" }}
           >
             {isAdminPortal ? "🛡️" : "🏢"}
           </div>
           <h2
             className="text-2xl font-bold mb-1"
             style={{
-              color: "#7a1f2b",
+              color: "#8B1A1A",
               fontFamily: "'Playfair Display', Georgia, serif",
             }}
           >
@@ -595,7 +592,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               <button
                 type="button"
                 className="text-xs font-medium underline"
-                style={{ color: "#7a1f2b" }}
+                style={{ color: "#8B1A1A" }}
                 data-ocid="login.link"
                 onClick={() => {
                   setLoginError("");
@@ -647,7 +644,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             data-ocid="login.submit_button"
             disabled={loginLoading}
             className="w-full text-white font-semibold h-11 text-base"
-            style={{ background: "#7a1f2b" }}
+            style={{ background: "#8B1A1A" }}
           >
             {loginLoading ? "Signing in…" : "Sign In"}
           </Button>
@@ -682,7 +679,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 type="button"
                 data-ocid="admin-login.link"
                 className="text-xs font-medium underline"
-                style={{ color: "#7a1f2b" }}
+                style={{ color: "#C9A84C" }}
                 onClick={() => {
                   setLoginEmail("");
                   setLoginPassword("");
@@ -1439,20 +1436,20 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   return (
     <div
       className="h-screen flex flex-col overflow-hidden"
-      style={{ background: "#FAF7F2" }}
+      style={{ background: "#F7F4EE" }}
     >
       {/* ── Top Header ── */}
       <header
         className="w-full flex flex-col items-center justify-center py-4 flex-shrink-0"
         style={{
-          borderBottom: "2px solid #c9a44c",
-          background: "#FAF7F2",
+          borderBottom: "1.5px solid #C9A84C",
+          background: "#F7F4EE",
         }}
       >
         <h1
           className="text-4xl font-bold tracking-tight"
           style={{
-            color: "#7a1f2b",
+            color: "#8B1A1A",
             fontFamily: "'Playfair Display', Georgia, serif",
           }}
         >
@@ -1460,7 +1457,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         </h1>
         <p
           className="text-xs tracking-widest uppercase mt-0.5"
-          style={{ color: "#c9a44c", letterSpacing: "0.18em" }}
+          style={{ color: "#C9A84C", letterSpacing: "0.18em" }}
         >
           ITR Workflow &amp; Status Tracker
         </p>
@@ -1468,15 +1465,60 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           <span
             className="mt-1 text-xs px-2 py-0.5 rounded font-semibold tracking-wide"
             style={{
-              background: "rgba(122,31,43,0.1)",
-              color: "#7a1f2b",
-              border: "1px solid rgba(122,31,43,0.25)",
+              background: "rgba(139,26,26,0.1)",
+              color: "#8B1A1A",
+              border: "1px solid rgba(139,26,26,0.25)",
             }}
           >
             ADMINISTRATOR PORTAL
           </span>
         )}
       </header>
+
+      {/* ── Quote Band ── */}
+      <div
+        style={{
+          background: "#F7F4EE",
+          borderBottom: "1px solid rgba(201,168,76,0.3)",
+          padding: "16px 40px 14px",
+          textAlign: "center",
+          flexShrink: 0,
+        }}
+      >
+        <p
+          style={{
+            fontFamily: "Georgia, serif",
+            fontSize: 15,
+            fontWeight: "bold",
+            fontStyle: "italic",
+            color: "#8B1A1A",
+            margin: 0,
+          }}
+        >
+          Centralize Your Workflow.
+        </p>
+        <p
+          style={{
+            fontFamily: "Georgia, serif",
+            fontSize: 15,
+            fontWeight: "bold",
+            fontStyle: "italic",
+            color: "#B8401A",
+            margin: "2px 0 0 0",
+          }}
+        >
+          Because You Can't Manage What You Don't Track.
+        </p>
+        <div
+          style={{
+            width: 120,
+            height: 1,
+            background: "#C9A84C",
+            opacity: 0.6,
+            margin: "10px auto 0",
+          }}
+        />
+      </div>
 
       {/* ── Main two-column body ── */}
       <main className="flex flex-1 flex-col md:flex-row overflow-hidden">
@@ -1491,7 +1533,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           style={{
             width: 2,
             background:
-              "linear-gradient(to bottom, transparent, #c9a44c 15%, #c9a44c 85%, transparent)",
+              "linear-gradient(to bottom, transparent, #D4C9A8 15%, #D4C9A8 85%, transparent)",
           }}
         />
 
@@ -1505,17 +1547,20 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       <footer
         className="w-full py-3 flex flex-col items-center flex-shrink-0"
         style={{
-          borderTop: "1px solid rgba(201,164,76,0.35)",
-          background: "#FAF7F2",
+          borderTop: "1px solid #E0D9C8",
+          background: "#F7F4EE",
         }}
       >
         <p
-          className="text-sm font-semibold tracking-wide text-center"
-          style={{ color: "#7a1f2b" }}
+          className="text-sm tracking-wide text-center"
+          style={{ color: "#8B1A1A", fontWeight: 600 }}
         >
           A complete workflow tool for tax professionals
         </p>
-        <p className="text-xs text-gray-400 mt-0.5 text-center">
+        <p
+          className="text-xs mt-0.5 text-center"
+          style={{ color: "#AAA", letterSpacing: "0.06em" }}
+        >
           Secure &bull; Multi-tenant &bull; Role-based access
         </p>
       </footer>
