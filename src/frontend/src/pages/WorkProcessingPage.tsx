@@ -6,10 +6,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CheckCircle, Edit2, Search } from "lucide-react";
+import { CheckCircle, Edit2, Lock, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import DatePickerInput from "../components/DatePickerInput";
 import { getFilingStatus, onStorageChange, storage } from "../data/storage";
 import type { User, WorkProcessing } from "../types";
 import { getTaxYears } from "../utils/taxYears";
@@ -24,14 +23,41 @@ const ITR_FORMS = [
   "ITR-6",
   "ITR-7",
 ];
-const FILING_STATUS_OPTIONS: Array<WorkProcessing["filingStatus"]> = [
-  "Pending",
-  "Pending for E-verification",
-  "E-Verified",
-];
 
 interface WorkProcessingPageProps {
   user?: User;
+}
+
+/** Derive DD-MM-YYYY from last 6 digits of a 15-digit ack number (positions 10-15). */
+function deriveFilingDateFromAck(digits: string): string | null {
+  if (digits.length !== 15) return null;
+  const last6 = digits.slice(9, 15);
+  const dd = last6.slice(0, 2);
+  const mm = last6.slice(2, 4);
+  const yy = last6.slice(4, 6);
+  const yyyy = `20${yy}`;
+  const dayNum = Number(dd);
+  const monthNum = Number(mm);
+  const yearNum = Number(yyyy);
+  if (
+    dayNum < 1 ||
+    dayNum > 31 ||
+    monthNum < 1 ||
+    monthNum > 12 ||
+    yearNum < 2000 ||
+    yearNum > 2099
+  ) {
+    return null;
+  }
+  const dt = new Date(yearNum, monthNum - 1, dayNum);
+  if (
+    dt.getFullYear() !== yearNum ||
+    dt.getMonth() !== monthNum - 1 ||
+    dt.getDate() !== dayNum
+  ) {
+    return null;
+  }
+  return `${dd}-${mm}-${yyyy}`;
 }
 
 // Inline editable acknowledgement number cell
@@ -80,6 +106,7 @@ function AckNumberCell({
         inputMode="numeric"
         maxLength={15}
         className="w-36 font-mono text-xs h-7"
+        style={{ border: "2px solid #6B1414" }}
       />
     );
   }
@@ -126,6 +153,7 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
           filingStatusDerived: fs,
           clientName: client?.name || "-",
           pan: client?.pan || "-",
+          hasAck: !!(w.ackNumber && /^\d{15}$/.test(w.ackNumber)),
         };
       })
       .filter((r) => {
@@ -181,10 +209,19 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
   const handleFilingStatusChange = (
     workId: string,
     newStatus: WorkProcessing["filingStatus"],
+    hasAck: boolean,
   ) => {
     const allWork = storage.getWork();
     const work = allWork.find((w) => w.id === workId);
     if (!work) return;
+
+    // Guard: if ack number exists, only allow post-filing statuses
+    if (hasAck && newStatus === "Pending") {
+      toast.error(
+        'Acknowledgement number is entered. Status must be "Pending for E-verification" or "E-Verified".',
+      );
+      return;
+    }
 
     const oldStatus = getFilingStatus(work);
     if (oldStatus === newStatus) return;
@@ -225,27 +262,35 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
     const allWork = storage.getWork();
     const work = allWork.find((w) => w.id === workId);
     if (!work) return;
+
+    // Auto-derive filing date from last 6 digits if ack is complete
+    const derivedDate = deriveFilingDateFromAck(newAck);
+    const changes: Partial<WorkProcessing> = { ackNumber: newAck };
+    if (derivedDate) {
+      changes.filingDate = derivedDate;
+      // Auto-upgrade filing status from Pending to Pending for E-verification
+      const currentStatus = getFilingStatus(work);
+      if (currentStatus === "Pending") {
+        changes.filingStatus = "Pending for E-verification";
+      }
+    }
+
     updateWork(
       workId,
-      { ackNumber: newAck },
+      changes,
       "Acknowledgement Number",
       work.ackNumber || "-",
       newAck || "-",
     );
-    if (newAck) toast.success("Acknowledgement number saved");
-  };
-
-  const handleFilingDateChange = (workId: string, newDate: string) => {
-    const allWork = storage.getWork();
-    const work = allWork.find((w) => w.id === workId);
-    if (!work) return;
-    updateWork(
-      workId,
-      { filingDate: newDate },
-      "Filing Date",
-      work.filingDate || "-",
-      newDate || "-",
-    );
+    if (newAck) {
+      if (derivedDate) {
+        toast.success("Acknowledgement number saved", {
+          description: `Filing date auto-set to ${derivedDate}`,
+        });
+      } else {
+        toast.success("Acknowledgement number saved");
+      }
+    }
   };
 
   const filingStatusBadge = (status: string) => {
@@ -255,9 +300,6 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
       return "bg-blue-100 text-blue-700 border border-blue-200";
     return "bg-orange-100 text-orange-700 border border-orange-200";
   };
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
 
   return (
     <div className="space-y-4">
@@ -385,18 +427,24 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
                   />
                 </td>
 
-                {/* Filing Date - DatePickerInput inline */}
+                {/* Filing Date - locked if ack number is 15 digits */}
                 <td className="py-2.5 px-3">
-                  <DatePickerInput
-                    value={row.filingDate || ""}
-                    onChange={(v) => handleFilingDateChange(row.id, v)}
-                    placeholder="DD-MM-YYYY"
-                    maxDate={today}
-                    className="w-44"
-                  />
+                  {row.hasAck ? (
+                    <div
+                      className="flex items-center gap-1 text-xs font-mono text-gray-700"
+                      title="Auto-filled from Acknowledgement Number (last 6 digits)"
+                    >
+                      <Lock className="w-3 h-3 text-gray-400 shrink-0" />
+                      <span>{row.filingDate || "-"}</span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-400 italic">
+                      {row.filingDate || "Enter Ack No."}
+                    </span>
+                  )}
                 </td>
 
-                {/* Filing Status - dropdown */}
+                {/* Filing Status - restricted to post-filing options when ack exists */}
                 <td className="py-2.5 px-3">
                   <Select
                     value={row.filingStatusDerived}
@@ -404,6 +452,7 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
                       handleFilingStatusChange(
                         row.id,
                         v as WorkProcessing["filingStatus"],
+                        row.hasAck,
                       )
                     }
                   >
@@ -413,22 +462,24 @@ export default function WorkProcessingPage({ user }: WorkProcessingPageProps) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {FILING_STATUS_OPTIONS.map((s) => (
-                        <SelectItem
-                          key={s}
-                          value={s || "Pending"}
-                          className="text-xs"
-                        >
-                          {s === "E-Verified" ? (
-                            <span className="flex items-center gap-1">
-                              <CheckCircle className="w-3 h-3 text-green-600" />
-                              E-Verified
-                            </span>
-                          ) : (
-                            s
-                          )}
+                      {/* "Pending" only shown when no ack number */}
+                      {!row.hasAck && (
+                        <SelectItem value="Pending" className="text-xs">
+                          Pending
                         </SelectItem>
-                      ))}
+                      )}
+                      <SelectItem
+                        value="Pending for E-verification"
+                        className="text-xs"
+                      >
+                        Pending for E-verification
+                      </SelectItem>
+                      <SelectItem value="E-Verified" className="text-xs">
+                        <span className="flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3 text-green-600" />
+                          E-Verified
+                        </span>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </td>

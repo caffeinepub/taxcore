@@ -132,7 +132,17 @@ export default function ClientDetailPage({ client, onBack }: Props) {
     if (digits.length === 15) {
       const derived = deriveFilingDateFromAck(digits);
       if (derived) {
-        setWorkForm((f) => ({ ...f, ackNumber: digits, filingDate: derived }));
+        // Auto-fill filing date and default filing status to "Pending for E-verification"
+        setWorkForm((f) => ({
+          ...f,
+          ackNumber: digits,
+          filingDate: derived,
+          // Only upgrade status if currently Pending (don't downgrade E-Verified)
+          filingStatus:
+            f.filingStatus === "Pending"
+              ? "Pending for E-verification"
+              : f.filingStatus,
+        }));
         setFilingDateLocked(true);
         return;
       }
@@ -223,6 +233,10 @@ export default function ClientDetailPage({ client, onBack }: Props) {
 
   const currentWork = work ? { ...work, ...workForm } : workForm;
   const headOfIncome = getHeadOfIncome(client);
+
+  // Whether ack number is complete -- restricts filing status options
+  const ackComplete =
+    !!currentWork.ackNumber && /^\d{15}$/.test(currentWork.ackNumber);
 
   const filingStatusColor = (status: string) => {
     if (status === "E-Verified") return "text-green-700";
@@ -619,8 +633,17 @@ export default function ClientDetailPage({ client, onBack }: Props) {
             {/* Filing Status */}
             <div>
               <Label>Filing Status</Label>
+              {ackComplete && (
+                <p className="text-xs text-blue-600 mt-0.5 mb-1">
+                  Acknowledgement number entered — only post-filing statuses
+                  available.
+                </p>
+              )}
               <Select
-                value={currentWork.filingStatus || "Pending"}
+                value={
+                  currentWork.filingStatus ||
+                  (ackComplete ? "Pending for E-verification" : "Pending")
+                }
                 onValueChange={(v) =>
                   setWorkForm((f) => ({
                     ...f,
@@ -632,7 +655,10 @@ export default function ClientDetailPage({ client, onBack }: Props) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Pending">Pending</SelectItem>
+                  {/* Show "Pending" only if no ack number */}
+                  {!ackComplete && (
+                    <SelectItem value="Pending">Pending</SelectItem>
+                  )}
                   <SelectItem value="Pending for E-verification">
                     Pending for E-verification
                   </SelectItem>
@@ -644,9 +670,9 @@ export default function ClientDetailPage({ client, onBack }: Props) {
                   className={`text-xs mt-1 ${filingStatusColor(currentWork.filingStatus)}`}
                 >
                   {currentWork.filingStatus === "E-Verified" &&
-                    "\u2705 Client excluded from deadline alerts"}
+                    "✅ Client excluded from deadline alerts"}
                   {currentWork.filingStatus === "Pending for E-verification" &&
-                    "\u26a0\ufe0f E-verification must be done within 30 days of filing"}
+                    "⚠️ E-verification must be done within 30 days of filing"}
                   {currentWork.filingStatus === "Pending" &&
                     "Work is in progress"}
                 </p>
@@ -660,7 +686,7 @@ export default function ClientDetailPage({ client, onBack }: Props) {
             )}
             {workSaved && (
               <p className="text-green-600 text-sm bg-green-50 rounded p-2">
-                \u2705 Saved successfully!
+                ✅ Saved successfully!
               </p>
             )}
             <Button
