@@ -119,6 +119,8 @@ export interface _SERVICE {
   'getAllWorkProcessing' : ActorMethod<[], Array<WorkProcessing>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getGlobalUserDatabase' : ActorMethod<[], string>,
+  'saveGlobalUserDatabase' : ActorMethod<[string], undefined>,
   'getClient' : ActorMethod<[ClientId], Client>,
   'getDashboardStats' : ActorMethod<[], DashboardStats>,
   'getDocumentInwardByClient' : ActorMethod<[ClientId], Array<DocumentInward>>,

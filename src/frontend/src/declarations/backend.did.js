@@ -128,6 +128,8 @@ export const idlService = IDL.Service({
   'getAllWorkProcessing' : IDL.Func([], [IDL.Vec(WorkProcessing)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+  'getGlobalUserDatabase' : IDL.Func([], [IDL.Text], ['query']),
+  'saveGlobalUserDatabase' : IDL.Func([IDL.Text], [], []),
   'getClient' : IDL.Func([ClientId], [Client], ['query']),
   'getDashboardStats' : IDL.Func([], [DashboardStats], ['query']),
   'getDocumentInwardByClient' : IDL.Func(
@@ -283,6 +285,8 @@ export const idlFactory = ({ IDL }) => {
     'getAllWorkProcessing' : IDL.Func([], [IDL.Vec(WorkProcessing)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+    'getGlobalUserDatabase' : IDL.Func([], [IDL.Text], ['query']),
+    'saveGlobalUserDatabase' : IDL.Func([IDL.Text], [], []),
     'getClient' : IDL.Func([ClientId], [Client], ['query']),
     'getDashboardStats' : IDL.Func([], [DashboardStats], ['query']),
     'getDocumentInwardByClient' : IDL.Func(

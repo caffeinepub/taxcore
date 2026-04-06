@@ -17,6 +17,7 @@ import {
   LogOut,
   Pencil,
   Receipt,
+  RefreshCw,
   Settings,
   Shield,
   ShieldCheck,
@@ -26,7 +27,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import { useTheme } from "../contexts/ThemeContext";
-import { storage } from "../data/storage";
+import { refreshFromCanister, storage } from "../data/storage";
 import { type Page, THEMES, type User } from "../types";
 import DeadlineBell from "./DeadlineBell";
 
@@ -347,7 +348,25 @@ export default function Layout({
   const isOwner = user.role === "Owner";
   const isSuperAdmin = user.role === "Super Admin";
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const { theme, setTheme } = useTheme();
+
+  async function handleRefresh() {
+    setIsRefreshing(true);
+    try {
+      await refreshFromCanister();
+      toast.success("Data refreshed from server.");
+      window.dispatchEvent(
+        new CustomEvent("taxcore-storage-change", {
+          detail: { key: "refresh" },
+        }),
+      );
+    } catch {
+      toast.error("Refresh failed. Please try again.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
   const initials = user.name
     .split(" ")
     .map((w) => w[0])
@@ -585,6 +604,25 @@ export default function Layout({
             </p>
           </div>
           <div className="flex items-center gap-3 text-sm text-gray-500">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              title="Refresh data from server"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all hover:opacity-90 disabled:opacity-60"
+              style={{
+                background: theme.primary,
+                color: "#fff",
+                border: "none",
+                cursor: isRefreshing ? "not-allowed" : "pointer",
+              }}
+            >
+              <RefreshCw
+                size={13}
+                className={isRefreshing ? "animate-spin" : ""}
+              />
+              {isRefreshing ? "Syncing…" : "Refresh"}
+            </button>
             <DeadlineBell user={user} onNavigate={onNavigate} />
             {new Date().toLocaleDateString("en-IN", {
               weekday: "short",

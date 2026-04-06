@@ -277,6 +277,10 @@ actor {
   let invoices = Map.empty<InvoiceId, Invoice>();
   let activityLogs = Map.empty<ActivityLogId, ActivityLog>();
 
+  // Global user database (shared across all browser sessions/devices)
+  // Stored as JSON text -- not tied to any specific caller principal
+  var globalUserDb : Text = "";
+
   // Compare modules
   module Client {
     public func compare(client1 : Client, client2 : Client) : Order.Order {
@@ -753,5 +757,15 @@ actor {
         .filter(func(inv) { inv.firmId == firmId })
         .sort();
     };
+  };
+
+  // Global User Database -- shared across all devices/browsers
+  // Anyone can read; used to persist TaxCore user accounts, firm config, etc.
+  public query func getGlobalUserDatabase() : async Text {
+    globalUserDb;
+  };
+
+  public shared func saveGlobalUserDatabase(json : Text) : async () {
+    globalUserDb := json;
   };
 };

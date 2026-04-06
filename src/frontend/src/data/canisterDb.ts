@@ -69,7 +69,7 @@ export async function getActor(): Promise<backendInterface> {
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 const JSON_PREFIX = "JSON:";
-const USERDB_KEY = "__taxcore_userdb__";
+const _USERDB_KEY = "__taxcore_userdb__";
 
 function encodeJson(data: unknown): string {
   return JSON_PREFIX + JSON.stringify(data);
@@ -118,37 +118,33 @@ interface WhatsAppSettings {
 }
 
 /**
- * Loads the user database from canister (stored as JSON in UserProfile.firmId).
+ * Loads the global user database from canister.
+ * Uses a shared canister variable (not per-caller), so all browsers/devices see the same data.
  * Returns null if not found or on error.
  */
 export async function loadUserDatabase(): Promise<UserDatabase | null> {
   try {
     const actor = await getActor();
-    // The user database is stored in the caller's UserProfile.firmId as JSON
-    const profile = await actor.getCallerUserProfile();
-    if (!profile) return null;
-    if (!profile.firmId || profile.name !== USERDB_KEY) return null;
-    return decodeJson<UserDatabase>(profile.firmId);
+    // Use the global shared storage (not per-caller)
+    const json = await actor.getGlobalUserDatabase();
+    if (!json) return null;
+    return decodeJson<UserDatabase>(json);
   } catch {
     return null;
   }
 }
 
 /**
- * Saves the entire user database to canister as JSON in UserProfile.firmId.
+ * Saves the entire user database to canister in a shared global slot.
+ * Not tied to any specific browser identity -- all devices can read it.
  */
 export async function saveUserDatabase(db: UserDatabase): Promise<void> {
   try {
     const actor = await getActor();
     const json = encodeJson(db);
-    await actor.saveCallerUserProfile({
-      name: USERDB_KEY,
-      email: "__taxcore_userdb__@internal",
-      firmId: json,
-      role: "system",
-    });
+    await actor.saveGlobalUserDatabase(json);
   } catch (err) {
-    console.error("[canisterDb] saveUserDatabase failed:", err);
+    console.error("[canisterDb] saveUserDatabase (global) failed:", err);
     throw err;
   }
 }

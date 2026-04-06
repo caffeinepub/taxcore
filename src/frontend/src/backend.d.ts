@@ -117,6 +117,8 @@ export interface backendInterface {
     getAllWorkProcessing(): Promise<Array<WorkProcessing>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
+    getGlobalUserDatabase(): Promise<string>;
+    saveGlobalUserDatabase(json: string): Promise<void>;
     getClient(id: ClientId): Promise<Client>;
     getDashboardStats(): Promise<DashboardStats>;
     getDocumentInwardByClient(clientId: ClientId): Promise<Array<DocumentInward>>;
