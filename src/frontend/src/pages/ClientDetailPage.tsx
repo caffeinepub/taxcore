@@ -27,6 +27,7 @@ export default function ClientDetailPage({
   onBack,
   onUpdateClient,
 }: Props) {
+  const currentUser = storage.getCurrentUser();
   const [docForm, setDocForm] = useState({
     date: "",
     mode: "Email" as DocumentInward["mode"],
@@ -340,6 +341,78 @@ export default function ClientDetailPage({
         allClients.map((c) => (c.id === client.id ? updatedClient : c)),
       );
       if (onUpdateClient) onUpdateClient(updatedClient);
+    }
+    // Audit log: compare old vs new work fields and log changes
+    if (currentUser) {
+      const oldWork = work;
+      const newStatus = (workForm.status ||
+        (oldWork?.status ?? "Pending")) as string;
+      const newFilingStatus = workForm.filingStatus || "Pending";
+      const newAck = workForm.ackNumber || "";
+      const newItrForm = workForm.itrForm || "";
+      const newReturnType = workForm.returnType || "Original";
+      const newRemark = workForm.remark || "";
+      const newFilingDate = workForm.filingDate || "";
+      const ts = new Date().toISOString();
+      const logEntry = (field: string, oldVal: string, newVal: string) => {
+        if (oldVal === newVal) return;
+        storage.addAuditLog({
+          id: storage.uid(),
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userRole: currentUser.role,
+          action: `Updated ${field}`,
+          clientId: client.id,
+          clientName: client.name,
+          fieldChanged: field,
+          oldValue: oldVal,
+          newValue: newVal,
+          timestamp: ts,
+        });
+      };
+      if (oldWork) {
+        const oldStatus =
+          oldWork.status === "Filed"
+            ? "Completed"
+            : (oldWork.status ?? "Pending");
+        logEntry("Work Status", oldStatus, newStatus);
+        logEntry(
+          "Filing Status",
+          oldWork.filingStatus ?? "Pending",
+          newFilingStatus,
+        );
+        logEntry("Ack Number", oldWork.ackNumber || "-", newAck || "-");
+        logEntry(
+          "Filing Date",
+          oldWork.filingDate || "-",
+          newFilingDate || "-",
+        );
+        logEntry("ITR Form", oldWork.itrForm || "-", newItrForm || "-");
+        logEntry(
+          "Return Type",
+          oldWork.returnType || "Original",
+          newReturnType,
+        );
+        if ((oldWork.remark || "") !== newRemark)
+          logEntry("Remark", oldWork.remark || "-", newRemark || "-");
+        if (dueDate !== (client.dueDate || ""))
+          logEntry("Due Date", client.dueDate || "-", dueDate || "-");
+      } else {
+        // New work record created
+        storage.addAuditLog({
+          id: storage.uid(),
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userRole: currentUser.role,
+          action: "Work Processing Created",
+          clientId: client.id,
+          clientName: client.name,
+          fieldChanged: "Work Processing",
+          oldValue: "-",
+          newValue: `Status: ${newStatus}, Filing: ${newFilingStatus}`,
+          timestamp: ts,
+        });
+      }
     }
     setWorkSaved(true);
     setTimeout(() => setWorkSaved(false), 2000);

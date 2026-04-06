@@ -108,7 +108,10 @@ export default function ClientMasterPage({
 
   useEffect(() => {
     setAlertClients(getDueAlertClients());
-    const unsub = onStorageChange(() => setAlertClients(getDueAlertClients()));
+    const unsub = onStorageChange(() => {
+      setAlertClients(getDueAlertClients());
+      setRefreshKey((k) => k + 1);
+    });
     return unsub;
   }, []);
 
@@ -260,6 +263,20 @@ export default function ClientMasterPage({
       storage.saveClients(
         allClients.map((c) => (c.id === editClient.id ? updated : c)),
       );
+      // Audit log for client edit
+      storage.addAuditLog({
+        id: storage.uid(),
+        userId: currentUserId,
+        userName: getCurrentUserName(),
+        userRole: currentUser?.role,
+        action: "Client Updated",
+        clientId: editClient.id,
+        clientName: form.name,
+        fieldChanged: "Client Details",
+        oldValue: editClient.name,
+        newValue: `${form.name} | PAN: ${pan} | Year: ${form.taxYear}`,
+        timestamp: new Date().toISOString(),
+      });
     } else {
       const newClient: Client = {
         id: storage.uid(),
@@ -291,6 +308,20 @@ export default function ClientMasterPage({
         updatedAt: new Date().toISOString(),
       };
       storage.saveWork([...work, wp]);
+      // Audit log for client add
+      storage.addAuditLog({
+        id: storage.uid(),
+        userId: currentUserId,
+        userName: getCurrentUserName(),
+        userRole: currentUser?.role,
+        action: "Client Added",
+        clientId: newClient.id,
+        clientName: newClient.name,
+        fieldChanged: "Client Added",
+        oldValue: "-",
+        newValue: `${newClient.name} | PAN: ${pan} | Year: ${form.taxYear}`,
+        timestamp: new Date().toISOString(),
+      });
     }
 
     setShowForm(false);
@@ -299,12 +330,28 @@ export default function ClientMasterPage({
 
   const handleDelete = (id: string) => {
     if (!confirm("Delete this client and all related data?")) return;
+    const deletedClient = storage.getClients().find((c) => c.id === id);
     storage.saveClients(storage.getClients().filter((c) => c.id !== id));
     storage.saveWork(storage.getWork().filter((w) => w.clientId !== id));
     storage.saveDocuments(
       storage.getDocuments().filter((d) => d.clientId !== id),
     );
     storage.saveBilling(storage.getBilling().filter((b) => b.clientId !== id));
+    if (deletedClient) {
+      storage.addAuditLog({
+        id: storage.uid(),
+        userId: currentUserId,
+        userName: getCurrentUserName(),
+        userRole: currentUser?.role,
+        action: "Client Deleted",
+        clientId: id,
+        clientName: deletedClient.name,
+        fieldChanged: "Client",
+        oldValue: `${deletedClient.name} | PAN: ${deletedClient.pan}`,
+        newValue: "Deleted",
+        timestamp: new Date().toISOString(),
+      });
+    }
     setRefreshKey((k) => k + 1);
   };
 
@@ -331,6 +378,7 @@ export default function ClientMasterPage({
       id: storage.uid(),
       userId: currentUserId,
       userName: getCurrentUserName(),
+      userRole: currentUser?.role,
       action: "Updated Work Status",
       clientId: client.id,
       clientName: client.name,
@@ -367,6 +415,7 @@ export default function ClientMasterPage({
       id: storage.uid(),
       userId: currentUserId,
       userName: getCurrentUserName(),
+      userRole: currentUser?.role,
       action: "Updated Inward Docs Status",
       clientId: client.id,
       clientName: client.name,

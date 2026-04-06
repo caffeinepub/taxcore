@@ -202,6 +202,8 @@ export interface backendInterface {
     getCallerUserRole(): Promise<UserRole>;
     getGlobalUserDatabase(): Promise<string>;
     saveGlobalUserDatabase(json: string): Promise<void>;
+    getGlobalAppData(): Promise<string>;
+    saveGlobalAppData(json: string): Promise<void>;
     getClient(id: ClientId): Promise<Client>;
     getDashboardStats(): Promise<DashboardStats>;
     getDocumentInwardByClient(clientId: ClientId): Promise<Array<DocumentInward>>;
@@ -665,6 +667,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.saveGlobalUserDatabase(arg0);
+            return result;
+        }
+    }
+    async getGlobalAppData(): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getGlobalAppData();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getGlobalAppData();
+            return result;
+        }
+    }
+    async saveGlobalAppData(arg0: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.saveGlobalAppData(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.saveGlobalAppData(arg0);
             return result;
         }
     }

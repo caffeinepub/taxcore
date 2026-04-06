@@ -8,8 +8,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Crown, Eye, EyeOff, Plus, Trash2, UserCheck } from "lucide-react";
-import { useMemo, useState } from "react";
-import { storage } from "../data/storage";
+import { useEffect, useMemo, useState } from "react";
+import {
+  onStorageChange,
+  silentRefreshFromCanister,
+  storage,
+} from "../data/storage";
 import type { User } from "../types";
 
 function isValidEmail(v: string): boolean {
@@ -52,6 +56,11 @@ export default function UserManagementPage() {
     return storage.getUsers();
   }, [refreshKey]);
 
+  useEffect(() => {
+    const unsub = onStorageChange(() => setRefreshKey((k) => k + 1));
+    return unsub;
+  }, []);
+
   const handleAdd = () => {
     setFormError("");
     if (!form.name.trim()) return setFormError("Name is required.");
@@ -79,6 +88,22 @@ export default function UserManagementPage() {
       firmOwnerId: currentUser?.id, // links staff to this owner
     };
     storage.saveUsers([...allUsers, newUser]);
+    // Audit log for staff creation
+    storage.addAuditLog({
+      id: storage.uid(),
+      userId: currentUser?.id || "unknown",
+      userName: currentUser?.name || "Owner",
+      userRole: currentUser?.role || "Owner",
+      action: "Staff Created",
+      clientId: "-",
+      clientName: "-",
+      fieldChanged: "Staff User",
+      oldValue: "-",
+      newValue: `${newUser.name} (${newUser.email})`,
+      timestamp: new Date().toISOString(),
+    });
+    // Immediately push to canister so other devices see the new staff account right away
+    silentRefreshFromCanister().catch(() => {});
     setForm({
       email: "",
       password: "",
@@ -99,7 +124,25 @@ export default function UserManagementPage() {
     if (target?.role === "Super Admin")
       return alert("Cannot delete the Administrator account.");
     if (!confirm("Delete this staff user?")) return;
+    const deletedUser = allUsers.find((u) => u.id === id);
     storage.saveUsers(allUsers.filter((u) => u.id !== id));
+    if (deletedUser) {
+      storage.addAuditLog({
+        id: storage.uid(),
+        userId: currentUser?.id || "unknown",
+        userName: currentUser?.name || "Owner",
+        userRole: currentUser?.role || "Owner",
+        action: "Staff Deleted",
+        clientId: "-",
+        clientName: "-",
+        fieldChanged: "Staff User",
+        oldValue: `${deletedUser.name} (${deletedUser.email})`,
+        newValue: "Deleted",
+        timestamp: new Date().toISOString(),
+      });
+    }
+    // Immediately push to canister
+    silentRefreshFromCanister().catch(() => {});
     setRefreshKey((k) => k + 1);
   };
 

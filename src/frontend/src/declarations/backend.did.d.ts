@@ -121,6 +121,8 @@ export interface _SERVICE {
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getGlobalUserDatabase' : ActorMethod<[], string>,
   'saveGlobalUserDatabase' : ActorMethod<[string], undefined>,
+  'getGlobalAppData' : ActorMethod<[], string>,
+  'saveGlobalAppData' : ActorMethod<[string], undefined>,
   'getClient' : ActorMethod<[ClientId], Client>,
   'getDashboardStats' : ActorMethod<[], DashboardStats>,
   'getDocumentInwardByClient' : ActorMethod<[ClientId], Array<DocumentInward>>,

@@ -118,7 +118,7 @@ export default function App() {
     silentRefreshFromCanister().catch(() => {});
     const interval = setInterval(() => {
       silentRefreshFromCanister().catch(() => {});
-    }, 30_000);
+    }, 5_000);
     return () => clearInterval(interval);
   }, [user]);
 

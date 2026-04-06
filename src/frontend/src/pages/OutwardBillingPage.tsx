@@ -8,8 +8,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Save, Search } from "lucide-react";
-import { useMemo, useState } from "react";
-import { storage } from "../data/storage";
+import { useEffect, useMemo, useState } from "react";
+import { onStorageChange, storage } from "../data/storage";
 import type { Billing } from "../types";
 
 export default function OutwardBillingPage() {
@@ -44,6 +44,11 @@ export default function OutwardBillingPage() {
         return { client: c, billing: b };
       });
   }, [search, refreshKey]);
+
+  useEffect(() => {
+    const unsub = onStorageChange(() => setRefreshKey((k) => k + 1));
+    return unsub;
+  }, []);
 
   const getVal = (clientId: string, billing: Billing) => ({
     ...billing,

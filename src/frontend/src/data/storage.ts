@@ -2,12 +2,12 @@
  * storage.ts
  *
  * Hybrid storage layer for TaxCore.
- * - In-memory cache for instant synchronous reads (same API as before)
+ * - In-memory cache for instant synchronous reads
  * - localStorage for offline/fast fallback cache
- * - ICP canister for permanent cross-device persistence
+ * - ICP canister for permanent cross-device persistence (global blobs)
  *
- * API surface is 100% backward-compatible with previous localStorage-only version.
- * New additions: initialize() and whenInitialized() for async startup sync.
+ * v2: All canister I/O now uses two global JSON blobs (not per-caller maps).
+ * This means any browser/device can read the same data without ICP identity issues.
  */
 
 import type {
@@ -22,13 +22,9 @@ import type {
   WorkProcessing,
 } from "../types";
 import {
-  buildClientIdMap,
-  canisterAddLog,
-  canisterSaveBilling,
-  canisterSaveClients,
-  canisterSaveDocuments,
-  canisterSaveWork,
+  type UserDatabase,
   loadAllFromCanister,
+  saveAppData,
   saveUserDatabase,
 } from "./canisterDb";
 
@@ -46,7 +42,7 @@ const KEYS = {
   notificationLogs: "taxcore_notification_logs",
 };
 
-// ─── In-memory cache ───────────────────────────────────────────────────────────
+// ─── In-memory cache ───────────────────────────────────────────────────────
 
 const cache: {
   users: User[];
@@ -78,7 +74,7 @@ let initPromise: Promise<void> | null = null;
 let isInitialized = false;
 export let lastSyncTime: Date | null = null;
 
-// ─── localStorage helpers (cache layer) ──────────────────────────────────────
+// ─── localStorage helpers ───────────────────────────────────────────────────
 
 function lsGet<T>(key: string): T[] {
   try {
@@ -96,7 +92,7 @@ function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
-// ─── Load cache from localStorage ─────────────────────────────────────────────
+// ─── Load cache from localStorage ─────────────────────────────────────────────────
 
 function loadCacheFromLocalStorage(): void {
   cache.users = lsGet<User>(KEYS.users);
@@ -125,7 +121,7 @@ function dispatchChange(key?: string): void {
   );
 }
 
-// ─── Write-through helper with background canister sync ────────────────────────
+// ─── Background sync helper ──────────────────────────────────────────────────
 // Writes to cache + localStorage immediately, dispatches change event,
 // then syncs to canister in background (fire-and-forget with retry)
 
@@ -145,6 +141,27 @@ function bgSync(
   attempt(retries);
 }
 
+// ─── Helper: build current AppData snapshot for canister save ──────────────────
+
+function buildAppDataSnapshot() {
+  return {
+    clients: cache.clients,
+    documents: cache.documents,
+    work: cache.work,
+    billing: cache.billing,
+    auditLogs: cache.auditLogs,
+  };
+}
+
+function buildUserDbSnapshot(): UserDatabase {
+  return {
+    users: cache.users,
+    firmAccounts: cache.firmAccounts,
+    superAdminCreated: cache.superAdminCreated,
+    whatsAppSettings: cache.whatsappSettings,
+  };
+}
+
 // ─── Main initialize function ──────────────────────────────────────────────────
 
 /**
@@ -160,31 +177,29 @@ export async function initialize(): Promise<void> {
     loadCacheFromLocalStorage();
 
     try {
-      // Load all data from canister in parallel
+      // Load all data from both global canister blobs in parallel
       const canisterData = await loadAllFromCanister();
 
-      // Merge canister data into cache
-      // Canister data wins if it has content (it's the source of truth)
-
-      // User database
+      // ─ User database ─
       if (canisterData.userDb) {
-        if (canisterData.userDb.users && canisterData.userDb.users.length > 0) {
-          cache.users = canisterData.userDb.users;
+        const udb = canisterData.userDb;
+        // Always trust canister for users (even empty array = real state)
+        if (udb.users && udb.users.length > 0) {
+          cache.users = udb.users;
           lsSet(KEYS.users, cache.users);
         }
-        if (
-          canisterData.userDb.firmAccounts &&
-          canisterData.userDb.firmAccounts.length > 0
-        ) {
-          cache.firmAccounts = canisterData.userDb.firmAccounts;
+        if (udb.firmAccounts && udb.firmAccounts.length > 0) {
+          cache.firmAccounts = udb.firmAccounts;
           lsSet(KEYS.firmAccounts, cache.firmAccounts);
         }
-        if (canisterData.userDb.superAdminCreated) {
+        // superAdminCreated flag: trust the canister value if true,
+        // also derive from users array as backup
+        if (udb.superAdminCreated) {
           cache.superAdminCreated = true;
           localStorage.setItem(KEYS.superAdminCreated, "true");
         }
-        if (canisterData.userDb.whatsAppSettings) {
-          cache.whatsappSettings = canisterData.userDb.whatsAppSettings ?? null;
+        if (udb.whatsAppSettings) {
+          cache.whatsappSettings = udb.whatsAppSettings ?? null;
           if (cache.whatsappSettings) {
             localStorage.setItem(
               KEYS.whatsappSettings,
@@ -194,54 +209,43 @@ export async function initialize(): Promise<void> {
         }
       }
 
-      // Also check if users array in canister has a super admin
-      // (in case the flag wasn't set but users exist)
-      const hasSuperAdmin = cache.users.some((u) => u.role === "Super Admin");
-      if (hasSuperAdmin) {
+      // Derive superAdminCreated from users array as a safety net
+      // (handles cases where flag wasn't set but admin user exists)
+      const hasAdmin = cache.users.some((u) => u.role === "Super Admin");
+      if (hasAdmin) {
         cache.superAdminCreated = true;
         localStorage.setItem(KEYS.superAdminCreated, "true");
       }
 
-      // Clients — canister data overrides localStorage if canister has data
+      // ─ App data ─
       if (canisterData.clients.length > 0) {
         cache.clients = canisterData.clients;
         lsSet(KEYS.clients, cache.clients);
       }
-
-      // Documents
       if (canisterData.documents.length > 0) {
         cache.documents = canisterData.documents;
         lsSet(KEYS.documents, cache.documents);
       }
-
-      // Work
       if (canisterData.work.length > 0) {
         cache.work = canisterData.work;
         lsSet(KEYS.work, cache.work);
       }
-
-      // Billing
       if (canisterData.billing.length > 0) {
         cache.billing = canisterData.billing;
         lsSet(KEYS.billing, cache.billing);
       }
-
-      // Audit logs — merge (canister might have more)
       if (canisterData.auditLogs.length > 0) {
-        // Merge: use canister logs, supplemented by any local-only logs
         const canisterIds = new Set(canisterData.auditLogs.map((l) => l.id));
         const localOnly = cache.auditLogs.filter((l) => !canisterIds.has(l.id));
         cache.auditLogs = [...canisterData.auditLogs, ...localOnly];
         lsSet(KEYS.auditLogs, cache.auditLogs);
       }
 
+      lastSyncTime = new Date();
       console.log("[storage] Initialized from canister:", {
         users: cache.users.length,
         clients: cache.clients.length,
-        documents: cache.documents.length,
-        work: cache.work.length,
-        billing: cache.billing.length,
-        auditLogs: cache.auditLogs.length,
+        superAdminCreated: cache.superAdminCreated,
       });
     } catch (err) {
       console.warn(
@@ -259,7 +263,6 @@ export async function initialize(): Promise<void> {
 
 /**
  * Returns a promise that resolves when storage is fully initialized from canister.
- * If initialize() was never called, it calls it automatically.
  */
 export async function whenInitialized(): Promise<void> {
   if (isInitialized) return;
@@ -268,11 +271,8 @@ export async function whenInitialized(): Promise<void> {
 
 /**
  * Forces a fresh reload from the canister, replacing cached data.
- * Safe to call at any time. Returns when done.
- * Use this for the manual Refresh button (full re-init).
  */
 export async function refreshFromCanister(): Promise<void> {
-  // Reset so initialize() runs again
   initPromise = null;
   isInitialized = false;
   return initialize();
@@ -281,103 +281,94 @@ export async function refreshFromCanister(): Promise<void> {
 /**
  * Silently polls the canister for fresh data without resetting initPromise.
  * Called every 30 seconds while the user is logged in.
- * Updates cache in-place and dispatches change events.
  */
 export async function silentRefreshFromCanister(): Promise<void> {
   try {
     const canisterData = await loadAllFromCanister();
-
     let changed = false;
 
     if (canisterData.userDb) {
-      if (canisterData.userDb.users && canisterData.userDb.users.length > 0) {
-        cache.users = canisterData.userDb.users;
+      const udb = canisterData.userDb;
+      // Always trust canister user data (handles deletions/additions on other devices)
+      if (udb.users !== undefined) {
+        const prev = JSON.stringify(cache.users);
+        cache.users = udb.users;
         lsSet(KEYS.users, cache.users);
-        changed = true;
+        if (JSON.stringify(udb.users) !== prev) changed = true;
       }
-      if (
-        canisterData.userDb.firmAccounts &&
-        canisterData.userDb.firmAccounts.length > 0
-      ) {
-        cache.firmAccounts = canisterData.userDb.firmAccounts;
+      if (udb.firmAccounts !== undefined) {
+        const prev = JSON.stringify(cache.firmAccounts);
+        cache.firmAccounts = udb.firmAccounts;
         lsSet(KEYS.firmAccounts, cache.firmAccounts);
-        changed = true;
+        if (JSON.stringify(udb.firmAccounts) !== prev) changed = true;
       }
-      if (canisterData.userDb.superAdminCreated) {
+      if (udb.superAdminCreated) {
         cache.superAdminCreated = true;
         localStorage.setItem(KEYS.superAdminCreated, "true");
       }
     }
 
-    if (canisterData.clients.length > 0) {
-      cache.clients = canisterData.clients;
-      lsSet(KEYS.clients, cache.clients);
-      changed = true;
+    // Derive superAdminCreated from users array as backup
+    if (cache.users.some((u) => u.role === "Super Admin")) {
+      cache.superAdminCreated = true;
+      localStorage.setItem(KEYS.superAdminCreated, "true");
     }
 
-    if (canisterData.documents.length > 0) {
-      cache.documents = canisterData.documents;
-      lsSet(KEYS.documents, cache.documents);
-      changed = true;
-    }
+    // Always trust canister app data - this handles deletions from other devices
+    const prevClients = JSON.stringify(cache.clients);
+    cache.clients = canisterData.clients;
+    lsSet(KEYS.clients, cache.clients);
+    if (JSON.stringify(canisterData.clients) !== prevClients) changed = true;
 
-    if (canisterData.work.length > 0) {
-      cache.work = canisterData.work;
-      lsSet(KEYS.work, cache.work);
-      changed = true;
-    }
+    const prevDocs = JSON.stringify(cache.documents);
+    cache.documents = canisterData.documents;
+    lsSet(KEYS.documents, cache.documents);
+    if (JSON.stringify(canisterData.documents) !== prevDocs) changed = true;
 
-    if (canisterData.billing.length > 0) {
-      cache.billing = canisterData.billing;
-      lsSet(KEYS.billing, cache.billing);
-      changed = true;
-    }
+    const prevWork = JSON.stringify(cache.work);
+    cache.work = canisterData.work;
+    lsSet(KEYS.work, cache.work);
+    if (JSON.stringify(canisterData.work) !== prevWork) changed = true;
 
-    if (canisterData.auditLogs.length > 0) {
-      const canisterIds = new Set(canisterData.auditLogs.map((l) => l.id));
-      const localOnly = cache.auditLogs.filter((l) => !canisterIds.has(l.id));
-      cache.auditLogs = [...canisterData.auditLogs, ...localOnly];
-      lsSet(KEYS.auditLogs, cache.auditLogs);
-      changed = true;
-    }
+    const prevBilling = JSON.stringify(cache.billing);
+    cache.billing = canisterData.billing;
+    lsSet(KEYS.billing, cache.billing);
+    if (JSON.stringify(canisterData.billing) !== prevBilling) changed = true;
 
-    lastSyncTime = new Date();
+    const prevLogs = JSON.stringify(cache.auditLogs);
+    cache.auditLogs = canisterData.auditLogs;
+    lsSet(KEYS.auditLogs, cache.auditLogs);
+    if (JSON.stringify(canisterData.auditLogs) !== prevLogs) changed = true;
+
     if (changed) {
-      dispatchChange("sync");
+      lastSyncTime = new Date();
+      dispatchChange("refresh");
     }
   } catch (err) {
-    console.warn("[storage] silentRefreshFromCanister failed:", err);
+    console.warn("[storage] silentRefresh failed:", err);
   }
 }
 
-// ─── Public storage API (same signatures as before) ───────────────────────────
+// ─── Storage API ───────────────────────────────────────────────────────────────
 
 export const storage = {
   uid,
 
-  // ─── Users ───────────────────────────────────────────────────────────────
+  // ─── Users ────────────────────────────────────────────────────────────
 
   getUsers: (): User[] => cache.users,
 
   saveUsers: (users: User[]): void => {
     cache.users = users;
     lsSet(KEYS.users, users);
-    // Check if super admin was created
     const hasSA = users.some((u) => u.role === "Super Admin");
     if (hasSA) {
       cache.superAdminCreated = true;
       localStorage.setItem(KEYS.superAdminCreated, "true");
     }
     dispatchChange(KEYS.users);
-    // Sync user database to canister
     bgSync(async () => {
-      const db = {
-        users: cache.users,
-        firmAccounts: cache.firmAccounts,
-        superAdminCreated: cache.superAdminCreated,
-        whatsAppSettings: cache.whatsappSettings,
-      };
-      await saveUserDatabase(db);
+      await saveUserDatabase(buildUserDbSnapshot());
     }, "saveUsers");
   },
 
@@ -394,10 +385,9 @@ export const storage = {
     else localStorage.removeItem(KEYS.currentUser);
   },
 
-  // ─── Super Admin flag ─────────────────────────────────────────────────────
+  // ─── Super Admin flag ─────────────────────────────────────────────────
 
   isSuperAdminCreated: (): boolean => {
-    // Check both in-memory flag AND users array
     return (
       cache.superAdminCreated ||
       cache.users.some((u) => u.role === "Super Admin")
@@ -407,19 +397,12 @@ export const storage = {
   markSuperAdminCreated: (): void => {
     cache.superAdminCreated = true;
     localStorage.setItem(KEYS.superAdminCreated, "true");
-    // Sync user DB to canister
     bgSync(async () => {
-      const db = {
-        users: cache.users,
-        firmAccounts: cache.firmAccounts,
-        superAdminCreated: true,
-        whatsAppSettings: cache.whatsappSettings,
-      };
-      await saveUserDatabase(db);
+      await saveUserDatabase(buildUserDbSnapshot());
     }, "markSuperAdminCreated");
   },
 
-  // ─── Firm Accounts ───────────────────────────────────────────────────────
+  // ─── Firm Accounts ────────────────────────────────────────────────────
 
   getFirmAccounts: (): FirmAccount[] => cache.firmAccounts,
 
@@ -428,17 +411,11 @@ export const storage = {
     lsSet(KEYS.firmAccounts, accounts);
     dispatchChange(KEYS.firmAccounts);
     bgSync(async () => {
-      const db = {
-        users: cache.users,
-        firmAccounts: accounts,
-        superAdminCreated: cache.superAdminCreated,
-        whatsAppSettings: cache.whatsappSettings,
-      };
-      await saveUserDatabase(db);
+      await saveUserDatabase(buildUserDbSnapshot());
     }, "saveFirmAccounts");
   },
 
-  // ─── Clients ───────────────────────────────────────────────────────────────
+  // ─── Clients ─────────────────────────────────────────────────────────────
 
   getClients: (): Client[] => cache.clients,
 
@@ -447,11 +424,11 @@ export const storage = {
     lsSet(KEYS.clients, clients);
     dispatchChange(KEYS.clients);
     bgSync(async () => {
-      await canisterSaveClients(clients);
+      await saveAppData(buildAppDataSnapshot());
     }, "saveClients");
   },
 
-  // ─── Documents ────────────────────────────────────────────────────────────
+  // ─── Documents ───────────────────────────────────────────────────────────
 
   getDocuments: (): DocumentInward[] => cache.documents,
 
@@ -460,12 +437,11 @@ export const storage = {
     lsSet(KEYS.documents, docs);
     dispatchChange(KEYS.documents);
     bgSync(async () => {
-      const clientIdMap = await buildClientIdMap();
-      await canisterSaveDocuments(docs, clientIdMap);
+      await saveAppData(buildAppDataSnapshot());
     }, "saveDocuments");
   },
 
-  // ─── Work Processing ───────────────────────────────────────────────────────
+  // ─── Work Processing ─────────────────────────────────────────────────────
 
   getWork: (): WorkProcessing[] => cache.work,
 
@@ -474,12 +450,11 @@ export const storage = {
     lsSet(KEYS.work, work);
     dispatchChange(KEYS.work);
     bgSync(async () => {
-      const clientIdMap = await buildClientIdMap();
-      await canisterSaveWork(work, clientIdMap);
+      await saveAppData(buildAppDataSnapshot());
     }, "saveWork");
   },
 
-  // ─── Billing ───────────────────────────────────────────────────────────────
+  // ─── Billing ─────────────────────────────────────────────────────────────
 
   getBilling: (): Billing[] => cache.billing,
 
@@ -488,8 +463,7 @@ export const storage = {
     lsSet(KEYS.billing, billing);
     dispatchChange(KEYS.billing);
     bgSync(async () => {
-      const clientIdMap = await buildClientIdMap();
-      await canisterSaveBilling(billing, clientIdMap);
+      await saveAppData(buildAppDataSnapshot());
     }, "saveBilling");
   },
 
@@ -501,13 +475,12 @@ export const storage = {
     cache.auditLogs.push(entry);
     lsSet(KEYS.auditLogs, cache.auditLogs);
     dispatchChange(KEYS.auditLogs);
-    // Add to canister asynchronously
     bgSync(
       async () => {
-        await canisterAddLog(entry);
+        await saveAppData(buildAppDataSnapshot());
       },
       "addAuditLog",
-      0, // no retry for logs
+      0,
     );
   },
 
@@ -515,11 +488,12 @@ export const storage = {
     cache.auditLogs = [];
     lsSet(KEYS.auditLogs, []);
     dispatchChange(KEYS.auditLogs);
-    // Note: canister doesn't expose a deleteActivityLog API, so canister logs persist
-    // but local display will be cleared
+    bgSync(async () => {
+      await saveAppData(buildAppDataSnapshot());
+    }, "clearAuditLogs");
   },
 
-  // ─── WhatsApp Settings ────────────────────────────────────────────────────
+  // ─── WhatsApp Settings ───────────────────────────────────────────────────
 
   getWhatsAppSettings: (): WhatsAppSettings | null => cache.whatsappSettings,
 
@@ -528,17 +502,11 @@ export const storage = {
     localStorage.setItem(KEYS.whatsappSettings, JSON.stringify(settings));
     dispatchChange(KEYS.whatsappSettings);
     bgSync(async () => {
-      const db = {
-        users: cache.users,
-        firmAccounts: cache.firmAccounts,
-        superAdminCreated: cache.superAdminCreated,
-        whatsAppSettings: settings,
-      };
-      await saveUserDatabase(db);
+      await saveUserDatabase(buildUserDbSnapshot());
     }, "saveWhatsAppSettings");
   },
 
-  // ─── Notification Logs ─────────────────────────────────────────────────────
+  // ─── Notification Logs ───────────────────────────────────────────────────
 
   getNotificationLogs: (): NotificationLog[] => cache.notificationLogs,
 
