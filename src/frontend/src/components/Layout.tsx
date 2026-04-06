@@ -24,10 +24,15 @@ import {
   UserCog,
   Users,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useTheme } from "../contexts/ThemeContext";
-import { refreshFromCanister, storage } from "../data/storage";
+import {
+  lastSyncTime,
+  onStorageChange,
+  refreshFromCanister,
+  storage,
+} from "../data/storage";
 import { type Page, THEMES, type User } from "../types";
 import DeadlineBell from "./DeadlineBell";
 
@@ -349,6 +354,29 @@ export default function Layout({
   const isSuperAdmin = user.role === "Super Admin";
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [syncDisplay, setSyncDisplay] = useState<string>("");
+
+  // Update sync display whenever storage changes
+  useEffect(() => {
+    function updateSyncDisplay() {
+      if (!lastSyncTime) {
+        setSyncDisplay("");
+        return;
+      }
+      const diffMs = Date.now() - lastSyncTime.getTime();
+      const diffSec = Math.floor(diffMs / 1000);
+      if (diffSec < 10) setSyncDisplay("just now");
+      else if (diffSec < 60) setSyncDisplay(`${diffSec}s ago`);
+      else setSyncDisplay(`${Math.floor(diffSec / 60)}m ago`);
+    }
+    updateSyncDisplay();
+    const unsub = onStorageChange(updateSyncDisplay);
+    const ticker = setInterval(updateSyncDisplay, 15_000);
+    return () => {
+      unsub();
+      clearInterval(ticker);
+    };
+  }, []);
   const { theme, setTheme } = useTheme();
 
   async function handleRefresh() {
@@ -604,25 +632,36 @@ export default function Layout({
             </p>
           </div>
           <div className="flex items-center gap-3 text-sm text-gray-500">
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              title="Refresh data from server"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all hover:opacity-90 disabled:opacity-60"
-              style={{
-                background: theme.primary,
-                color: "#fff",
-                border: "none",
-                cursor: isRefreshing ? "not-allowed" : "pointer",
-              }}
-            >
-              <RefreshCw
-                size={13}
-                className={isRefreshing ? "animate-spin" : ""}
-              />
-              {isRefreshing ? "Syncing…" : "Refresh"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                title="Refresh data from server"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all hover:opacity-90 disabled:opacity-60"
+                style={{
+                  background: theme.primary,
+                  color: "#fff",
+                  border: "none",
+                  cursor: isRefreshing ? "not-allowed" : "pointer",
+                }}
+              >
+                <RefreshCw
+                  size={13}
+                  className={isRefreshing ? "animate-spin" : ""}
+                />
+                {isRefreshing ? "Syncing…" : "Refresh"}
+              </button>
+              {syncDisplay && (
+                <span
+                  className="text-xs"
+                  style={{ color: "#AAA" }}
+                  title="Last synced from server"
+                >
+                  ✓ {syncDisplay}
+                </span>
+              )}
+            </div>
             <DeadlineBell user={user} onNavigate={onNavigate} />
             {new Date().toLocaleDateString("en-IN", {
               weekday: "short",

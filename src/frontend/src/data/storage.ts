@@ -76,6 +76,7 @@ const cache: {
 
 let initPromise: Promise<void> | null = null;
 let isInitialized = false;
+export let lastSyncTime: Date | null = null;
 
 // ─── localStorage helpers (cache layer) ──────────────────────────────────────
 
@@ -268,12 +269,85 @@ export async function whenInitialized(): Promise<void> {
 /**
  * Forces a fresh reload from the canister, replacing cached data.
  * Safe to call at any time. Returns when done.
+ * Use this for the manual Refresh button (full re-init).
  */
 export async function refreshFromCanister(): Promise<void> {
   // Reset so initialize() runs again
   initPromise = null;
   isInitialized = false;
   return initialize();
+}
+
+/**
+ * Silently polls the canister for fresh data without resetting initPromise.
+ * Called every 30 seconds while the user is logged in.
+ * Updates cache in-place and dispatches change events.
+ */
+export async function silentRefreshFromCanister(): Promise<void> {
+  try {
+    const canisterData = await loadAllFromCanister();
+
+    let changed = false;
+
+    if (canisterData.userDb) {
+      if (canisterData.userDb.users && canisterData.userDb.users.length > 0) {
+        cache.users = canisterData.userDb.users;
+        lsSet(KEYS.users, cache.users);
+        changed = true;
+      }
+      if (
+        canisterData.userDb.firmAccounts &&
+        canisterData.userDb.firmAccounts.length > 0
+      ) {
+        cache.firmAccounts = canisterData.userDb.firmAccounts;
+        lsSet(KEYS.firmAccounts, cache.firmAccounts);
+        changed = true;
+      }
+      if (canisterData.userDb.superAdminCreated) {
+        cache.superAdminCreated = true;
+        localStorage.setItem(KEYS.superAdminCreated, "true");
+      }
+    }
+
+    if (canisterData.clients.length > 0) {
+      cache.clients = canisterData.clients;
+      lsSet(KEYS.clients, cache.clients);
+      changed = true;
+    }
+
+    if (canisterData.documents.length > 0) {
+      cache.documents = canisterData.documents;
+      lsSet(KEYS.documents, cache.documents);
+      changed = true;
+    }
+
+    if (canisterData.work.length > 0) {
+      cache.work = canisterData.work;
+      lsSet(KEYS.work, cache.work);
+      changed = true;
+    }
+
+    if (canisterData.billing.length > 0) {
+      cache.billing = canisterData.billing;
+      lsSet(KEYS.billing, cache.billing);
+      changed = true;
+    }
+
+    if (canisterData.auditLogs.length > 0) {
+      const canisterIds = new Set(canisterData.auditLogs.map((l) => l.id));
+      const localOnly = cache.auditLogs.filter((l) => !canisterIds.has(l.id));
+      cache.auditLogs = [...canisterData.auditLogs, ...localOnly];
+      lsSet(KEYS.auditLogs, cache.auditLogs);
+      changed = true;
+    }
+
+    lastSyncTime = new Date();
+    if (changed) {
+      dispatchChange("sync");
+    }
+  } catch (err) {
+    console.warn("[storage] silentRefreshFromCanister failed:", err);
+  }
 }
 
 // ─── Public storage API (same signatures as before) ───────────────────────────

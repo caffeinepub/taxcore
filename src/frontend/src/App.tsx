@@ -2,7 +2,13 @@ import { Toaster } from "@/components/ui/sonner";
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import Layout from "./components/Layout";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { initialize, seedData, storage } from "./data/storage";
+import {
+  initialize,
+  lastSyncTime,
+  seedData,
+  silentRefreshFromCanister,
+  storage,
+} from "./data/storage";
 import type { Client, Page, User } from "./types";
 
 // Lazy load all pages for faster initial load
@@ -103,6 +109,18 @@ export default function App() {
         setStorageReady(true);
       });
   }, []);
+
+  // Auto-refresh from canister every 30 seconds when logged in
+  // biome-ignore lint/correctness/useExhaustiveDependencies: user.id is the stable identity key
+  useEffect(() => {
+    if (!user) return;
+    // Immediately sync on login
+    silentRefreshFromCanister().catch(() => {});
+    const interval = setInterval(() => {
+      silentRefreshFromCanister().catch(() => {});
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
