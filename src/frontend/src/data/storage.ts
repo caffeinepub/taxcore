@@ -205,18 +205,27 @@ export async function initialize(): Promise<void> {
       // ─ User database ─
       if (canisterData.userDb) {
         const udb = canisterData.userDb;
-        // Always trust canister for users (even empty array = real state)
-        if (udb.users && udb.users.length > 0) {
-          cache.users = udb.users;
-          lsSet(KEYS.users, cache.users);
+        // Always trust canister for users — canister is the authoritative source.
+        // Even if canister returns an empty array, that might mean no users yet (new deployment).
+        // However, we preserve local users if canister is empty AND we have local users
+        // (guards against bgSync race where canister write hasn't completed yet).
+        if (udb.users !== undefined) {
+          if (udb.users.length > 0) {
+            // Canister has users — always use them
+            cache.users = udb.users;
+            lsSet(KEYS.users, cache.users);
+          }
+          // If canister returns empty but local has users, keep local (bgSync not completed yet)
         }
-        if (udb.firmAccounts && udb.firmAccounts.length > 0) {
-          cache.firmAccounts = udb.firmAccounts;
-          lsSet(KEYS.firmAccounts, cache.firmAccounts);
+        if (udb.firmAccounts !== undefined) {
+          if (udb.firmAccounts.length > 0) {
+            cache.firmAccounts = udb.firmAccounts;
+            lsSet(KEYS.firmAccounts, cache.firmAccounts);
+          }
         }
-        // superAdminCreated flag: trust the canister value if true,
-        // also derive from users array as backup
-        if (udb.superAdminCreated) {
+        // superAdminCreated flag: ALWAYS sync from canister regardless of users array length.
+        // This is the critical fix: the flag must propagate even when users array guard fires.
+        if (udb.superAdminCreated === true) {
           cache.superAdminCreated = true;
           localStorage.setItem(KEYS.superAdminCreated, "true");
         }
@@ -311,30 +320,37 @@ export async function silentRefreshFromCanister(): Promise<void> {
 
     if (canisterData.userDb) {
       const udb = canisterData.userDb;
-      // Always trust canister user data (handles deletions/additions on other devices)
+      // Always trust canister user data (handles deletions/additions on other devices).
+      // CRITICAL: Update users if canister has users. If canister returns empty, preserve
+      // local users (guards bgSync race: local write may not have reached canister yet).
       if (udb.users !== undefined) {
         const prev = JSON.stringify(cache.users);
-        // Only update if canister has users OR we have no local users
-        // Prevents wiping users when canister has not received bgSync yet
-        if (udb.users.length > 0 || cache.users.length === 0) {
+        if (udb.users.length > 0) {
+          // Canister has real data — always use it
           cache.users = udb.users;
           lsSet(KEYS.users, cache.users);
         }
+        // If canister empty + local has users: keep local (bgSync not yet committed)
         if (JSON.stringify(cache.users) !== prev) changed = true;
       }
       if (udb.firmAccounts !== undefined) {
         const prev = JSON.stringify(cache.firmAccounts);
-        cache.firmAccounts = udb.firmAccounts;
-        lsSet(KEYS.firmAccounts, cache.firmAccounts);
-        if (JSON.stringify(udb.firmAccounts) !== prev) changed = true;
+        if (udb.firmAccounts.length > 0) {
+          cache.firmAccounts = udb.firmAccounts;
+          lsSet(KEYS.firmAccounts, cache.firmAccounts);
+        }
+        if (JSON.stringify(cache.firmAccounts) !== prev) changed = true;
       }
-      if (udb.superAdminCreated) {
+      // CRITICAL FIX: Always sync superAdminCreated flag from canister,
+      // even when users array is empty or guard didn't fire.
+      // This ensures new browsers see login (not setup) as soon as canister has the flag.
+      if (udb.superAdminCreated === true) {
         cache.superAdminCreated = true;
         localStorage.setItem(KEYS.superAdminCreated, "true");
       }
     }
 
-    // Derive superAdminCreated from users array as backup
+    // Derive superAdminCreated from users array as backup safety net
     if (cache.users.some((u) => u.role === "Super Admin")) {
       cache.superAdminCreated = true;
       localStorage.setItem(KEYS.superAdminCreated, "true");

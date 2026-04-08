@@ -3,7 +3,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { saveUserDatabaseNow, storage, whenInitialized } from "../data/storage";
+import {
+  onStorageChange,
+  refreshFromCanister,
+  saveUserDatabaseNow,
+  storage,
+  whenInitialized,
+} from "../data/storage";
 import type { FirmAccount, User } from "../types";
 
 interface LoginPageProps {
@@ -250,23 +256,83 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   // Check if Super Admin exists on mount.
   // Wait for canister data to load first (whenInitialized) to avoid false-positive setup screens.
-  // If not, silently redirect to the hidden SA setup view.
+  // If the first canister load shows no admin, we do ONE extra fresh canister fetch as a safety
+  // net (handles race where App.tsx loaded before canister write completed on another device).
   // Owners never see any reference to this -- the setup page has no links back visible.
   useEffect(() => {
-    whenInitialized()
-      .then(() => {
-        const users = storage.getUsers();
-        const hasSuperAdmin = users.some((u) => u.role === "Super Admin");
-        if (!hasSuperAdmin && !storage.isSuperAdminCreated()) {
-          setView("super-admin-setup");
+    async function checkAdminExists() {
+      try {
+        // Wait for initial canister load (may already be done from App.tsx init)
+        await whenInitialized();
+
+        // First check: use data already loaded into cache
+        const checkFromCache = (): boolean => {
+          const users = storage.getUsers();
+          return (
+            storage.isSuperAdminCreated() ||
+            users.some((u) => u.role === "Super Admin")
+          );
+        };
+
+        if (checkFromCache()) {
+          // Admin confirmed via cache — show login immediately
+          setCheckingAdmin(false);
+          return;
         }
+
+        // No admin found in local cache. Do a forced fresh canister fetch.
+        // This handles the case where:
+        //   - Admin was registered on another browser
+        //   - App.tsx initialize() ran before that browser's bgSync completed
+        //   - Local cache is stale/empty
+        try {
+          await refreshFromCanister();
+        } catch {
+          // Canister unreachable — fall through with whatever cache has
+        }
+
+        // Re-check after fresh load
+        if (checkFromCache()) {
+          setCheckingAdmin(false);
+          return;
+        }
+
+        // Genuinely no admin exists anywhere — show setup
+        setView("super-admin-setup");
         setCheckingAdmin(false);
-      })
-      .catch(() => {
-        // Even on canister error, proceed to login
+      } catch {
+        // Even on canister error, proceed to login (don't block the user)
         setCheckingAdmin(false);
-      });
+      }
+    }
+
+    checkAdminExists();
   }, []);
+
+  // Fix 2: After checkingAdmin is resolved and view is "super-admin-setup",
+  // listen for background storage sync events. If a Super Admin appears in
+  // the canister (registered from another device), switch to login view.
+  useEffect(() => {
+    if (checkingAdmin) return; // still loading — nothing to do yet
+    if (view !== "super-admin-setup") return; // not on setup screen — nothing to do
+
+    function recheckAdmin() {
+      const users = storage.getUsers();
+      const adminExists =
+        storage.isSuperAdminCreated() ||
+        users.some((u) => u.role === "Super Admin");
+      if (adminExists) {
+        setView("login");
+      }
+    }
+
+    // Check immediately (in case storage was updated since checkingAdmin resolved)
+    recheckAdmin();
+
+    // Also subscribe to any future storage changes (from 5-second background sync)
+    const unsub = onStorageChange(recheckAdmin);
+    return unsub;
+  }, [checkingAdmin, view]);
 
   // Countdown timer for OTP resend
   useEffect(() => {

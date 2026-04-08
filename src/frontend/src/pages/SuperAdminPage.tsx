@@ -257,6 +257,23 @@ export default function SuperAdminPage() {
   );
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // ─── Profile completeness state ───────────────────────────────────────────
+  // Show a profile setup banner if the admin still has the default name "Admin".
+  // Re-derive from refreshKey so it stays in sync with background canister syncs.
+  const adminUser: User | null = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    refreshKey;
+    return storage.getUsers().find((u) => u.role === "Super Admin") ?? null;
+  }, [refreshKey]);
+
+  const isProfileIncomplete =
+    !adminUser?.name || adminUser.name.trim() === "Admin";
+  const [showProfileBanner, setShowProfileBanner] = useState(true);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileName, setProfileName] = useState(adminUser?.name ?? "");
+  const [profileNameError, setProfileNameError] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+
   // ─── URL hash param helpers ───────────────────────────────────────────────
 
   function getHashParams(): URLSearchParams {
@@ -482,6 +499,35 @@ export default function SuperAdminPage() {
     toast.success(
       `Firm ${nowActive ? "activated" : "deactivated"} successfully.`,
     );
+  }
+
+  async function handleSaveProfile() {
+    if (!profileName.trim()) {
+      setProfileNameError("Name is required.");
+      return;
+    }
+    if (profileName.trim().length < 2) {
+      setProfileNameError("Name must be at least 2 characters.");
+      return;
+    }
+    setSavingProfile(true);
+    setProfileNameError("");
+    try {
+      const allUsers = storage.getUsers();
+      const updatedUsers = allUsers.map((u) =>
+        u.role === "Super Admin" ? { ...u, name: profileName.trim() } : u,
+      );
+      await saveUsersNow(updatedUsers).catch(() =>
+        storage.saveUsers(updatedUsers),
+      );
+      // Refresh key triggers adminUser useMemo to re-derive the updated user
+      setRefreshKey((k) => k + 1);
+      setEditingProfile(false);
+      addAdminAuditLog("Administrator updated profile name");
+      toast.success("Profile updated successfully.");
+    } finally {
+      setSavingProfile(false);
+    }
   }
 
   function handleUpgradeToPaid(id: string) {
@@ -870,6 +916,96 @@ export default function SuperAdminPage() {
           </p>
         </div>
       </div>
+
+      {/* ── Profile completeness banner ── */}
+      {isProfileIncomplete && showProfileBanner && (
+        <div
+          data-ocid="super-admin.profile_banner"
+          className="rounded-xl border px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3"
+          style={{
+            background: "rgba(201,168,76,0.08)",
+            borderColor: "rgba(201,168,76,0.4)",
+          }}
+        >
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-lg flex-shrink-0">👤</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold" style={{ color: "#7a4f03" }}>
+                Complete your Administrator profile
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Set your display name so the system shows your identity
+                correctly.
+              </p>
+            </div>
+          </div>
+          {editingProfile ? (
+            <div className="flex flex-col gap-1.5 sm:w-64 flex-shrink-0">
+              <div className="flex gap-2">
+                <Input
+                  data-ocid="super-admin.profile_name_input"
+                  value={profileName}
+                  onChange={(e) => {
+                    setProfileName(e.target.value);
+                    if (profileNameError) setProfileNameError("");
+                  }}
+                  placeholder="Your full name"
+                  className="h-8 text-sm"
+                  autoFocus
+                />
+                <Button
+                  data-ocid="super-admin.profile_save_button"
+                  size="sm"
+                  className="text-white h-8 px-3 flex-shrink-0"
+                  style={{ background: theme.primary }}
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile}
+                >
+                  {savingProfile ? "…" : "Save"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2 flex-shrink-0"
+                  onClick={() => {
+                    setEditingProfile(false);
+                    setProfileName(adminUser?.name ?? "");
+                    setProfileNameError("");
+                  }}
+                >
+                  ✕
+                </Button>
+              </div>
+              {profileNameError && (
+                <p className="text-xs text-red-600">{profileNameError}</p>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button
+                data-ocid="super-admin.profile_edit_button"
+                size="sm"
+                className="text-white h-8"
+                style={{ background: theme.primary }}
+                onClick={() => {
+                  setProfileName(adminUser?.name ?? "");
+                  setEditingProfile(true);
+                }}
+              >
+                Update Profile
+              </Button>
+              <button
+                type="button"
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                aria-label="Dismiss profile banner"
+                onClick={() => setShowProfileBanner(false)}
+              >
+                ×
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tab navigation */}
       <div className="flex border-b border-gray-200">
