@@ -13,8 +13,8 @@
  * the app in a new browser, because there is no per-principal scoping.
  */
 
-import type { backendInterface } from "../backend";
-import { createActorWithConfig } from "../config";
+import { createActorWithConfig } from "@caffeineai/core-infrastructure";
+import { type backendInterface, createActor } from "../backend";
 import type {
   AuditLogEntry,
   Billing,
@@ -37,7 +37,7 @@ export async function getActor(): Promise<backendInterface> {
   if (initializationPromise) return initializationPromise;
 
   initializationPromise = (async () => {
-    const actor = await createActorWithConfig();
+    const actor = await createActorWithConfig(createActor);
     actorInstance = actor;
     initialized = true;
     return actor;

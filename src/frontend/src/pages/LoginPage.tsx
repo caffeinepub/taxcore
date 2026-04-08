@@ -3,8 +3,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { storage, whenInitialized } from "../data/storage";
-import type { User } from "../types";
+import { saveUserDatabaseNow, storage, whenInitialized } from "../data/storage";
+import type { FirmAccount, User } from "../types";
 
 interface LoginPageProps {
   onLogin: (user: User) => void;
@@ -241,6 +241,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [showOwnerConfirmPw, setShowOwnerConfirmPw] = useState(false);
   const [showNewPw, setShowNewPw] = useState(false);
   const [showNewConfirmPw, setShowNewConfirmPw] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -309,7 +310,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       if (user) {
         if (user.isActive === false) {
           setLoginError(
-            "Your account has been deactivated. Contact the administrator.",
+            "Your account has been disabled. Please contact the Administrator.",
           );
           setLoginLoading(false);
           return;
@@ -329,6 +330,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           return;
         }
         storage.setCurrentUser(user);
+        // Track last login for the firm
+        if (user.role === "Owner") {
+          storage.updateFirmLastLogin(user.id);
+        } else if (user.role === "Staff" && user.firmOwnerId) {
+          storage.updateFirmLastLogin(user.firmOwnerId);
+        }
         onLogin(user);
       } else {
         setLoginError("Invalid email or password.");
@@ -337,7 +344,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     }, 300);
   }
 
-  function handleSuperAdminSetup(e: React.FormEvent) {
+  async function handleSuperAdminSetup(e: React.FormEvent) {
     e.preventDefault();
     setSaError("");
     let hasErr = false;
@@ -380,11 +387,21 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     };
     storage.saveUsers([superAdmin]);
     storage.markSuperAdminCreated();
+    setSaving(true);
+    try {
+      await saveUserDatabaseNow();
+    } catch (err) {
+      console.error(
+        "[LoginPage] Failed to save user database to canister:",
+        err,
+      );
+    }
+    setSaving(false);
     storage.setCurrentUser(superAdmin);
     onLogin(superAdmin);
   }
 
-  function handleOwnerSignup(e: React.FormEvent) {
+  async function handleOwnerSignup(e: React.FormEvent) {
     e.preventDefault();
     setOwnerError("");
     let hasErr = false;
@@ -437,6 +454,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       return;
     }
 
+    // Check mobile uniqueness
+    const mobileExists = users.some(
+      (u) => u.mobile && u.mobile === ownerMobile.trim(),
+    );
+    if (mobileExists) {
+      setOwnerMobileError("An account with this mobile number already exists.");
+      return;
+    }
+
     const newOwner: User = {
       id: storage.uid(),
       email: ownerEmail.trim(),
@@ -448,6 +474,32 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       accessType: "Trial",
     };
     storage.saveUsers([...users, newOwner]);
+
+    // Also create a matching FirmAccount so the owner appears in the Super Admin panel
+    const existingFirms = storage.getFirmAccounts();
+    const newFirmAccount: FirmAccount = {
+      id: newOwner.id,
+      ownerName: ownerName.trim(),
+      firmName: ownerFirm.trim(),
+      email: ownerEmail.trim(),
+      mobile: ownerMobile.trim(),
+      accessType: "Trial",
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      clientCount: 0,
+    };
+    storage.saveFirmAccounts([...existingFirms, newFirmAccount]);
+
+    setSaving(true);
+    try {
+      await saveUserDatabaseNow();
+    } catch (err) {
+      console.error(
+        "[LoginPage] Failed to save user database to canister:",
+        err,
+      );
+    }
+    setSaving(false);
     storage.setCurrentUser(newOwner);
     onLogin(newOwner);
   }
@@ -887,8 +939,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             data-ocid="super-admin-signup.submit_button"
             className="w-full text-white font-semibold h-11 text-base"
             style={{ background: "#7a1f2b" }}
+            disabled={saving}
           >
-            Complete Setup
+            {saving ? "Saving..." : "Complete Setup"}
           </Button>
         </form>
       </div>
@@ -1090,8 +1143,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             data-ocid="owner-signup.submit_button"
             className="w-full text-white font-semibold h-11 text-base"
             style={{ background: "#7a1f2b" }}
+            disabled={saving}
           >
-            Create Owner Account
+            {saving ? "Saving..." : "Create Owner Account"}
           </Button>
         </form>
         <p className="text-xs text-gray-400 mt-3 text-center">

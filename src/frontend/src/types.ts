@@ -28,6 +28,7 @@ export interface FirmAccount {
   isActive: boolean;
   createdAt: string;
   clientCount: number;
+  lastLogin?: string; // ISO date string, updated on each Owner/Staff login
 }
 
 export interface Client {

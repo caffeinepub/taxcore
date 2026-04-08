@@ -162,6 +162,28 @@ function buildUserDbSnapshot(): UserDatabase {
   };
 }
 
+/** Immediately (awaited) saves the user database to canister. Use for critical first-time saves. */
+export async function saveUserDatabaseNow(): Promise<void> {
+  await saveUserDatabase(buildUserDbSnapshot());
+}
+
+/**
+ * Saves users immediately to canister (awaited, not fire-and-forget).
+ * Use after any user creation/deletion to guarantee cross-device visibility
+ * within the next 5-second poll cycle.
+ */
+export async function saveUsersNow(users: User[]): Promise<void> {
+  cache.users = users;
+  lsSet(KEYS.users, users);
+  const hasSA = users.some((u) => u.role === "Super Admin");
+  if (hasSA) {
+    cache.superAdminCreated = true;
+    localStorage.setItem(KEYS.superAdminCreated, "true");
+  }
+  dispatchChange(KEYS.users);
+  await saveUserDatabase(buildUserDbSnapshot());
+}
+
 // ─── Main initialize function ──────────────────────────────────────────────────
 
 /**
@@ -292,9 +314,13 @@ export async function silentRefreshFromCanister(): Promise<void> {
       // Always trust canister user data (handles deletions/additions on other devices)
       if (udb.users !== undefined) {
         const prev = JSON.stringify(cache.users);
-        cache.users = udb.users;
-        lsSet(KEYS.users, cache.users);
-        if (JSON.stringify(udb.users) !== prev) changed = true;
+        // Only update if canister has users OR we have no local users
+        // Prevents wiping users when canister has not received bgSync yet
+        if (udb.users.length > 0 || cache.users.length === 0) {
+          cache.users = udb.users;
+          lsSet(KEYS.users, cache.users);
+        }
+        if (JSON.stringify(cache.users) !== prev) changed = true;
       }
       if (udb.firmAccounts !== undefined) {
         const prev = JSON.stringify(cache.firmAccounts);
@@ -336,13 +362,22 @@ export async function silentRefreshFromCanister(): Promise<void> {
     if (JSON.stringify(canisterData.billing) !== prevBilling) changed = true;
 
     const prevLogs = JSON.stringify(cache.auditLogs);
-    cache.auditLogs = canisterData.auditLogs;
+    if (canisterData.auditLogs.length > 0) {
+      // Merge: canister is authoritative, but preserve local-only entries not yet synced
+      const canisterIds = new Set(canisterData.auditLogs.map((l) => l.id));
+      const localOnly = cache.auditLogs.filter((l) => !canisterIds.has(l.id));
+      cache.auditLogs = [...canisterData.auditLogs, ...localOnly];
+    }
+    // If canister returned empty, do NOT wipe local cache (bgSync may not have completed yet)
     lsSet(KEYS.auditLogs, cache.auditLogs);
-    if (JSON.stringify(canisterData.auditLogs) !== prevLogs) changed = true;
+    if (JSON.stringify(cache.auditLogs) !== prevLogs) changed = true;
 
     if (changed) {
       lastSyncTime = new Date();
       dispatchChange("refresh");
+    } else {
+      // Always update lastSyncTime even when unchanged
+      lastSyncTime = new Date();
     }
   } catch (err) {
     console.warn("[storage] silentRefresh failed:", err);
@@ -413,6 +448,30 @@ export const storage = {
     bgSync(async () => {
       await saveUserDatabase(buildUserDbSnapshot());
     }, "saveFirmAccounts");
+  },
+
+  /**
+   * Updates lastLogin timestamp for the FirmAccount belonging to the given owner ID.
+   * For Staff users, pass their firmOwnerId. For Owner users, pass their own id.
+   */
+  updateFirmLastLogin: (firmOwnerId: string): void => {
+    // Find the owner user to match their email → firm account
+    const ownerUser = cache.users.find(
+      (u) => u.id === firmOwnerId && u.role === "Owner",
+    );
+    if (!ownerUser) return;
+
+    const updated = cache.firmAccounts.map((f) =>
+      f.email.toLowerCase() === ownerUser.email.toLowerCase()
+        ? { ...f, lastLogin: new Date().toISOString() }
+        : f,
+    );
+    cache.firmAccounts = updated;
+    lsSet(KEYS.firmAccounts, updated);
+    dispatchChange(KEYS.firmAccounts);
+    bgSync(async () => {
+      await saveUserDatabase(buildUserDbSnapshot());
+    }, "updateFirmLastLogin");
   },
 
   // ─── Clients ─────────────────────────────────────────────────────────────

@@ -10,133 +10,18 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
-export interface ActivityLog {
-  'id' : ActivityLogId,
-  'userName' : string,
-  'clientId' : string,
-  'action' : string,
-  'userId' : string,
-  'role' : string,
-  'firmId' : string,
-  'timestamp' : bigint,
-  'details' : string,
-}
-export type ActivityLogId = bigint;
-export interface Client {
-  'id' : ClientId,
-  'pan' : string,
-  'clientType' : string,
-  'name' : string,
-  'createdAt' : bigint,
-  'createdBy' : string,
-  'email' : string,
-  'firmId' : string,
-  'sourceOfIncome' : string,
-  'mobile' : string,
-}
-export type ClientId = bigint;
-export interface DashboardStats {
-  'documentsPending' : bigint,
-  'filedITR' : bigint,
-  'totalClients' : bigint,
-  'inProgressITR' : bigint,
-  'readyForDelivery' : bigint,
-  'pendingITR' : bigint,
-}
-export interface DocumentInward {
-  'id' : DocumentInwardId,
-  'clientId' : ClientId,
-  'dateOfReceipt' : string,
-  'mode' : string,
-  'documentStatus' : string,
-  'firmId' : string,
-  'remarks' : string,
-}
-export type DocumentInwardId = bigint;
-export interface ExportData {
-  'documents' : Array<DocumentInward>,
-  'billing' : Array<Invoice>,
-  'workProcessing' : Array<WorkProcessing>,
-  'clients' : Array<Client>,
-}
-export interface Invoice {
-  'id' : InvoiceId,
-  'clientId' : ClientId,
-  'generatedAt' : bigint,
-  'generatedBy' : string,
-  'paid' : boolean,
-  'invoiceNumber' : string,
-  'firmId' : string,
-  'amount' : bigint,
-}
-export type InvoiceId = bigint;
-export interface OutwardDocument {
-  'id' : OutwardDocumentId,
-  'clientId' : ClientId,
-  'readyDate' : string,
-  'firmId' : string,
-  'outwardStatus' : string,
-}
-export type OutwardDocumentId = bigint;
-export interface UserProfile {
-  'name' : string,
-  'role' : string,
-  'email' : string,
-  'firmId' : string,
-}
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
-export interface WorkProcessing {
-  'id' : WorkProcessingId,
-  'clientId' : ClientId,
-  'itrFormType' : string,
-  'filingStatus' : string,
-  'ackNumber' : string,
-  'dueDateOfFiling' : string,
-  'firmId' : string,
-  'dateOfFiling' : string,
-}
-export type WorkProcessingId = bigint;
 export interface _SERVICE {
-  '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
-  'addActivityLog' : ActorMethod<[ActivityLog], ActivityLogId>,
-  'addDocumentInward' : ActorMethod<[DocumentInward], DocumentInwardId>,
-  'addWorkProcessing' : ActorMethod<[WorkProcessing], WorkProcessingId>,
+  '_initializeAccessControl' : ActorMethod<[], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
-  'assignStaffRole' : ActorMethod<[Principal, string], undefined>,
-  'createClient' : ActorMethod<[Client], ClientId>,
-  'deleteClient' : ActorMethod<[ClientId], undefined>,
-  'deleteDocumentInward' : ActorMethod<[DocumentInwardId], undefined>,
-  'disableTrialMode' : ActorMethod<[], undefined>,
-  'generateInvoice' : ActorMethod<[Invoice], InvoiceId>,
-  'getActivityLogsByClient' : ActorMethod<[string], Array<ActivityLog>>,
-  'getAllActivityLogs' : ActorMethod<[], Array<ActivityLog>>,
-  'getAllClients' : ActorMethod<[], Array<Client>>,
-  'getAllDataForExport' : ActorMethod<[], ExportData>,
-  'getAllInvoices' : ActorMethod<[], Array<Invoice>>,
-  'getAllOutwardDocuments' : ActorMethod<[], Array<OutwardDocument>>,
-  'getAllWorkProcessing' : ActorMethod<[], Array<WorkProcessing>>,
-  'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
-  'getGlobalUserDatabase' : ActorMethod<[], string>,
-  'saveGlobalUserDatabase' : ActorMethod<[string], undefined>,
   'getGlobalAppData' : ActorMethod<[], string>,
-  'saveGlobalAppData' : ActorMethod<[string], undefined>,
-  'getClient' : ActorMethod<[ClientId], Client>,
-  'getDashboardStats' : ActorMethod<[], DashboardStats>,
-  'getDocumentInwardByClient' : ActorMethod<[ClientId], Array<DocumentInward>>,
-  'getInvoiceByClient' : ActorMethod<[ClientId], Array<Invoice>>,
-  'getOutwardStatusByClient' : ActorMethod<[ClientId], Array<OutwardDocument>>,
-  'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
-  'getWorkProcessingByClient' : ActorMethod<[ClientId], Array<WorkProcessing>>,
+  'getGlobalUserDatabase' : ActorMethod<[], string>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
-  'markInvoicePaid' : ActorMethod<[InvoiceId], undefined>,
-  'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
-  'updateClient' : ActorMethod<[Client], undefined>,
-  'updateDocumentInward' : ActorMethod<[DocumentInward], undefined>,
-  'updateOutwardStatus' : ActorMethod<[OutwardDocument], undefined>,
-  'updateWorkProcessing' : ActorMethod<[WorkProcessing], undefined>,
+  'saveGlobalAppData' : ActorMethod<[string], undefined>,
+  'saveGlobalUserDatabase' : ActorMethod<[string], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

@@ -1,0 +1,149 @@
+// Version: 1.0.0
+type ActivityLogId__459988552 = Nat;
+type ActivityLog__439802922 =
+  {
+    action : Text;
+    clientId : Text;
+    details : Text;
+    firmId : Text;
+    id : ActivityLogId__459988552;
+    role : Text;
+    timestamp : Int;
+    userId : Text;
+    userName : Text
+  };
+type ClientId__894050839 = Nat;
+type Client__171211559 =
+  {
+    clientType : Text;
+    createdAt : Int;
+    createdBy : Text;
+    email : Text;
+    firmId : Text;
+    id : ClientId__894050839;
+    mobile : Text;
+    name : Text;
+    pan : Text;
+    sourceOfIncome : Text
+  };
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type DocumentInwardId__947414387 = Nat;
+type DocumentInward__584284508 =
+  {
+    clientId : ClientId__894050839;
+    dateOfReceipt : Text;
+    documentStatus : Text;
+    firmId : Text;
+    id : DocumentInwardId__947414387;
+    mode : Text;
+    remarks : Text
+  };
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type InvoiceId__400649173 = Nat;
+type Invoice__772203955 =
+  {
+    amount : Nat;
+    clientId : ClientId__894050839;
+    firmId : Text;
+    generatedAt : Int;
+    generatedBy : Text;
+    id : InvoiceId__400649173;
+    invoiceNumber : Text;
+    paid : Bool
+  };
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type Map__158565046<K, V> = Map__297112838<K, V>;
+type Map__297112838<K, V> =
+  {var root : Node__46230540<K, V>; var size : Nat__490723111};
+type Map__605269027<K, V> = Map__158565046<K, V>;
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type OutwardDocumentId__624161376 = Nat;
+type OutwardDocument__77750602 =
+  {
+    clientId : ClientId__894050839;
+    firmId : Text;
+    id : OutwardDocumentId__624161376;
+    outwardStatus : Text;
+    readyDate : Text
+  };
+type UserProfile__491224006 =
+  {email : Text; firmId : Text; name : Text; role : Text};
+type UserRole__1054455867 = {#admin; #guest; #user};
+type WorkProcessingId__965795224 = Nat;
+type WorkProcessing__772922670 =
+  {
+    ackNumber : Text;
+    clientId : ClientId__894050839;
+    dateOfFiling : Text;
+    dueDateOfFiling : Text;
+    filingStatus : Text;
+    firmId : Text;
+    id : WorkProcessingId__965795224;
+    itrFormType : Text
+  };
+actor {
+  stable accessControlState :
+    {
+      var adminAssigned : Bool;
+      userRoles : Map__605269027<Principal, UserRole__1054455867>
+    };
+  stable activityLogs :
+    {
+      var root :
+        Node__46230540<ActivityLogId__459988552, ActivityLog__439802922>;
+      var size : Nat__490723111
+    };
+  stable clients :
+    {
+      var root : Node__46230540<ClientId__894050839, Client__171211559>;
+      var size : Nat__490723111
+    };
+  stable documentInwards :
+    {
+      var root :
+        Node__46230540<DocumentInwardId__947414387, DocumentInward__584284508>;
+      var size : Nat__490723111
+    };
+  stable firmClientCounts :
+    {var root : Node__46230540<Text, Nat>; var size : Nat__490723111};
+  stable firmOwners :
+    {var root : Node__46230540<Text, Principal>; var size : Nat__490723111};
+  stable var globalAppData : Text;
+  stable var globalUserDb : Text;
+  stable invoices :
+    {
+      var root : Node__46230540<InvoiceId__400649173, Invoice__772203955>;
+      var size : Nat__490723111
+    };
+  stable var nextActivityLogId : Nat;
+  stable var nextClientId : Nat;
+  stable var nextDocumentInwardId : Nat;
+  stable var nextInvoiceId : Nat;
+  stable var nextOutwardDocumentId : Nat;
+  stable var nextWorkProcessingId : Nat;
+  stable outwardDocuments :
+    {
+      var root :
+        Node__46230540<OutwardDocumentId__624161376,
+                        OutwardDocument__77750602>;
+      var size : Nat__490723111
+    };
+  stable trialModeFirms :
+    {var root : Node__46230540<Text, Bool>; var size : Nat__490723111};
+  stable userProfiles :
+    {
+      var root : Node__46230540<Principal, UserProfile__491224006>;
+      var size : Nat__490723111
+    };
+  stable workProcessings :
+    {
+      var root :
+        Node__46230540<WorkProcessingId__965795224, WorkProcessing__772922670>;
+      var size : Nat__490723111
+    }
+};

@@ -89,192 +89,35 @@ export class ExternalBlob {
         return this;
     }
 }
-export type DocumentInwardId = bigint;
-export type WorkProcessingId = bigint;
-export interface ExportData {
-    documents: Array<DocumentInward>;
-    billing: Array<Invoice>;
-    workProcessing: Array<WorkProcessing>;
-    clients: Array<Client>;
-}
-export interface ActivityLog {
-    id: ActivityLogId;
-    userName: string;
-    clientId: string;
-    action: string;
-    userId: string;
-    role: string;
-    firmId: string;
-    timestamp: bigint;
-    details: string;
-}
-export interface WorkProcessing {
-    id: WorkProcessingId;
-    clientId: ClientId;
-    itrFormType: string;
-    filingStatus: string;
-    ackNumber: string;
-    dueDateOfFiling: string;
-    firmId: string;
-    dateOfFiling: string;
-}
-export interface Invoice {
-    id: InvoiceId;
-    clientId: ClientId;
-    generatedAt: bigint;
-    generatedBy: string;
-    paid: boolean;
-    invoiceNumber: string;
-    firmId: string;
-    amount: bigint;
-}
-export interface DashboardStats {
-    documentsPending: bigint;
-    filedITR: bigint;
-    totalClients: bigint;
-    inProgressITR: bigint;
-    readyForDelivery: bigint;
-    pendingITR: bigint;
-}
-export type OutwardDocumentId = bigint;
-export interface DocumentInward {
-    id: DocumentInwardId;
-    clientId: ClientId;
-    dateOfReceipt: string;
-    mode: string;
-    documentStatus: string;
-    firmId: string;
-    remarks: string;
-}
-export interface OutwardDocument {
-    id: OutwardDocumentId;
-    clientId: ClientId;
-    readyDate: string;
-    firmId: string;
-    outwardStatus: string;
-}
-export type ActivityLogId = bigint;
-export type InvoiceId = bigint;
-export interface Client {
-    id: ClientId;
-    pan: string;
-    clientType: string;
-    name: string;
-    createdAt: bigint;
-    createdBy: string;
-    email: string;
-    firmId: string;
-    sourceOfIncome: string;
-    mobile: string;
-}
-export type ClientId = bigint;
-export interface UserProfile {
-    name: string;
-    role: string;
-    email: string;
-    firmId: string;
-}
 export enum UserRole {
     admin = "admin",
     user = "user",
     guest = "guest"
 }
 export interface backendInterface {
-    _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
-    addActivityLog(log: ActivityLog): Promise<ActivityLogId>;
-    addDocumentInward(doc: DocumentInward): Promise<DocumentInwardId>;
-    addWorkProcessing(wp: WorkProcessing): Promise<WorkProcessingId>;
+    _initializeAccessControl(): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
-    assignStaffRole(staffPrincipal: Principal, firmId: string): Promise<void>;
-    createClient(client: Client): Promise<ClientId>;
-    deleteClient(id: ClientId): Promise<void>;
-    deleteDocumentInward(id: DocumentInwardId): Promise<void>;
-    disableTrialMode(): Promise<void>;
-    generateInvoice(invoice: Invoice): Promise<InvoiceId>;
-    getActivityLogsByClient(clientId: string): Promise<Array<ActivityLog>>;
-    getAllActivityLogs(): Promise<Array<ActivityLog>>;
-    getAllClients(): Promise<Array<Client>>;
-    getAllDataForExport(): Promise<ExportData>;
-    getAllInvoices(): Promise<Array<Invoice>>;
-    getAllOutwardDocuments(): Promise<Array<OutwardDocument>>;
-    getAllWorkProcessing(): Promise<Array<WorkProcessing>>;
-    getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
-    getGlobalUserDatabase(): Promise<string>;
-    saveGlobalUserDatabase(json: string): Promise<void>;
     getGlobalAppData(): Promise<string>;
-    saveGlobalAppData(json: string): Promise<void>;
-    getClient(id: ClientId): Promise<Client>;
-    getDashboardStats(): Promise<DashboardStats>;
-    getDocumentInwardByClient(clientId: ClientId): Promise<Array<DocumentInward>>;
-    getInvoiceByClient(clientId: ClientId): Promise<Array<Invoice>>;
-    getOutwardStatusByClient(clientId: ClientId): Promise<Array<OutwardDocument>>;
-    getUserProfile(user: Principal): Promise<UserProfile | null>;
-    getWorkProcessingByClient(clientId: ClientId): Promise<Array<WorkProcessing>>;
+    getGlobalUserDatabase(): Promise<string>;
     isCallerAdmin(): Promise<boolean>;
-    markInvoicePaid(id: InvoiceId): Promise<void>;
-    saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    updateClient(client: Client): Promise<void>;
-    updateDocumentInward(doc: DocumentInward): Promise<void>;
-    updateOutwardStatus(od: OutwardDocument): Promise<void>;
-    updateWorkProcessing(wp: WorkProcessing): Promise<void>;
+    saveGlobalAppData(json: string): Promise<void>;
+    saveGlobalUserDatabase(json: string): Promise<void>;
 }
-import type { UserProfile as _UserProfile, UserRole as _UserRole } from "./declarations/backend.did.d.ts";
+import type { UserRole as _UserRole } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
-    async _initializeAccessControlWithSecret(arg0: string): Promise<void> {
+    async _initializeAccessControl(): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor._initializeAccessControlWithSecret(arg0);
+                const result = await this.actor._initializeAccessControl();
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor._initializeAccessControlWithSecret(arg0);
-            return result;
-        }
-    }
-    async addActivityLog(arg0: ActivityLog): Promise<ActivityLogId> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.addActivityLog(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.addActivityLog(arg0);
-            return result;
-        }
-    }
-    async addDocumentInward(arg0: DocumentInward): Promise<DocumentInwardId> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.addDocumentInward(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.addDocumentInward(arg0);
-            return result;
-        }
-    }
-    async addWorkProcessing(arg0: WorkProcessing): Promise<WorkProcessingId> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.addWorkProcessing(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.addWorkProcessing(arg0);
+            const result = await this.actor._initializeAccessControl();
             return result;
         }
     }
@@ -292,353 +135,31 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async assignStaffRole(arg0: Principal, arg1: string): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.assignStaffRole(arg0, arg1);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.assignStaffRole(arg0, arg1);
-            return result;
-        }
-    }
-    async createClient(arg0: Client): Promise<ClientId> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.createClient(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.createClient(arg0);
-            return result;
-        }
-    }
-    async deleteClient(arg0: ClientId): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.deleteClient(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.deleteClient(arg0);
-            return result;
-        }
-    }
-    async deleteDocumentInward(arg0: DocumentInwardId): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.deleteDocumentInward(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.deleteDocumentInward(arg0);
-            return result;
-        }
-    }
-    async disableTrialMode(): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.disableTrialMode();
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.disableTrialMode();
-            return result;
-        }
-    }
-    async generateInvoice(arg0: Invoice): Promise<InvoiceId> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.generateInvoice(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.generateInvoice(arg0);
-            return result;
-        }
-    }
-    async getActivityLogsByClient(arg0: string): Promise<Array<ActivityLog>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getActivityLogsByClient(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getActivityLogsByClient(arg0);
-            return result;
-        }
-    }
-    async getAllActivityLogs(): Promise<Array<ActivityLog>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getAllActivityLogs();
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getAllActivityLogs();
-            return result;
-        }
-    }
-    async getAllClients(): Promise<Array<Client>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getAllClients();
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getAllClients();
-            return result;
-        }
-    }
-    async getAllDataForExport(): Promise<ExportData> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getAllDataForExport();
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getAllDataForExport();
-            return result;
-        }
-    }
-    async getAllInvoices(): Promise<Array<Invoice>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getAllInvoices();
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getAllInvoices();
-            return result;
-        }
-    }
-    async getAllOutwardDocuments(): Promise<Array<OutwardDocument>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getAllOutwardDocuments();
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getAllOutwardDocuments();
-            return result;
-        }
-    }
-    async getAllWorkProcessing(): Promise<Array<WorkProcessing>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getAllWorkProcessing();
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getAllWorkProcessing();
-            return result;
-        }
-    }
-    async getCallerUserProfile(): Promise<UserProfile | null> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getCallerUserProfile();
-                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getCallerUserProfile();
-            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
-        }
-    }
     async getCallerUserRole(): Promise<UserRole> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserRole();
-                return from_candid_UserRole_n4(this._uploadFile, this._downloadFile, result);
+                return from_candid_UserRole_n3(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserRole();
-            return from_candid_UserRole_n4(this._uploadFile, this._downloadFile, result);
+            return from_candid_UserRole_n3(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getClient(arg0: ClientId): Promise<Client> {
+    async getGlobalAppData(): Promise<string> {
         if (this.processError) {
             try {
-                const result = await this.actor.getClient(arg0);
+                const result = await this.actor.getGlobalAppData();
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getClient(arg0);
-            return result;
-        }
-    }
-    async getDashboardStats(): Promise<DashboardStats> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getDashboardStats();
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getDashboardStats();
-            return result;
-        }
-    }
-    async getDocumentInwardByClient(arg0: ClientId): Promise<Array<DocumentInward>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getDocumentInwardByClient(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getDocumentInwardByClient(arg0);
-            return result;
-        }
-    }
-    async getInvoiceByClient(arg0: ClientId): Promise<Array<Invoice>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getInvoiceByClient(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getInvoiceByClient(arg0);
-            return result;
-        }
-    }
-    async getOutwardStatusByClient(arg0: ClientId): Promise<Array<OutwardDocument>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getOutwardStatusByClient(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getOutwardStatusByClient(arg0);
-            return result;
-        }
-    }
-    async getUserProfile(arg0: Principal): Promise<UserProfile | null> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getUserProfile(arg0);
-                return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getUserProfile(arg0);
-            return from_candid_opt_n3(this._uploadFile, this._downloadFile, result);
-        }
-    }
-    async getWorkProcessingByClient(arg0: ClientId): Promise<Array<WorkProcessing>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getWorkProcessingByClient(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getWorkProcessingByClient(arg0);
-            return result;
-        }
-    }
-    async isCallerAdmin(): Promise<boolean> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.isCallerAdmin();
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.isCallerAdmin();
-            return result;
-        }
-    }
-    async markInvoicePaid(arg0: InvoiceId): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.markInvoicePaid(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.markInvoicePaid(arg0);
-            return result;
-        }
-    }
-    async saveCallerUserProfile(arg0: UserProfile): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.saveCallerUserProfile(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.saveCallerUserProfile(arg0);
+            const result = await this.actor.getGlobalAppData();
             return result;
         }
     }
@@ -656,31 +177,17 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async saveGlobalUserDatabase(arg0: string): Promise<void> {
+    async isCallerAdmin(): Promise<boolean> {
         if (this.processError) {
             try {
-                const result = await this.actor.saveGlobalUserDatabase(arg0);
+                const result = await this.actor.isCallerAdmin();
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.saveGlobalUserDatabase(arg0);
-            return result;
-        }
-    }
-    async getGlobalAppData(): Promise<string> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getGlobalAppData();
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getGlobalAppData();
+            const result = await this.actor.isCallerAdmin();
             return result;
         }
     }
@@ -698,70 +205,25 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async updateClient(arg0: Client): Promise<void> {
+    async saveGlobalUserDatabase(arg0: string): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.updateClient(arg0);
+                const result = await this.actor.saveGlobalUserDatabase(arg0);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.updateClient(arg0);
-            return result;
-        }
-    }
-    async updateDocumentInward(arg0: DocumentInward): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.updateDocumentInward(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.updateDocumentInward(arg0);
-            return result;
-        }
-    }
-    async updateOutwardStatus(arg0: OutwardDocument): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.updateOutwardStatus(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.updateOutwardStatus(arg0);
-            return result;
-        }
-    }
-    async updateWorkProcessing(arg0: WorkProcessing): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.updateWorkProcessing(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.updateWorkProcessing(arg0);
+            const result = await this.actor.saveGlobalUserDatabase(arg0);
             return result;
         }
     }
 }
-function from_candid_UserRole_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
-    return from_candid_variant_n5(_uploadFile, _downloadFile, value);
+function from_candid_UserRole_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
+    return from_candid_variant_n4(_uploadFile, _downloadFile, value);
 }
-function from_candid_opt_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
-    return value.length === 0 ? null : value[0];
-}
-function from_candid_variant_n5(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n4(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     admin: null;
 } | {
     user: null;

@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,18 +18,297 @@ import {
 import {
   Building2,
   CheckCircle,
+  Eye,
+  LayoutDashboard,
   Plus,
+  Search,
   ShieldCheck,
-  Trash2,
+  Star,
+  Users,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { storage } from "../data/storage";
-import type { FirmAccount, User } from "../types";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { useTheme } from "../contexts/ThemeContext";
+import { onStorageChange, saveUsersNow, storage } from "../data/storage";
+import type { AuditLogEntry, FirmAccount, User } from "../types";
+
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatLastLogin(iso: string | undefined): string {
+  if (!iso) return "Never";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Never";
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function addAdminAuditLog(action: string): void {
+  const entry: AuditLogEntry = {
+    id: storage.uid(),
+    userId: "super-admin",
+    userName: "Administrator",
+    userRole: "Super Admin",
+    action,
+    clientId: "",
+    clientName: "",
+    fieldChanged: "",
+    oldValue: "",
+    newValue: "",
+    timestamp: new Date().toISOString(),
+  };
+  storage.addAuditLog(entry);
+}
+
+// ─── Stat Card ─────────────────────────────────────────────────────────────────
+
+function StatCard({
+  label,
+  value,
+  icon,
+  color,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  color: string;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
+      <div
+        className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
+        style={{ background: `${color}18`, color }}
+      >
+        {icon}
+      </div>
+      <div>
+        <div className="text-2xl font-bold" style={{ color }}>
+          {value}
+        </div>
+        <div className="text-xs text-gray-500 mt-0.5">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── View Details Modal ────────────────────────────────────────────────────────
+
+function FirmDetailsModal({
+  firm,
+  onClose,
+}: {
+  firm: FirmAccount | null;
+  onClose: () => void;
+}) {
+  const { theme } = useTheme();
+  if (!firm) return null;
+
+  const users = storage.getUsers();
+  const clients = storage.getClients();
+
+  // Find owner user
+  const ownerUser = users.find(
+    (u) =>
+      u.email.toLowerCase() === firm.email.toLowerCase() && u.role === "Owner",
+  );
+  const totalClients = clients.filter(
+    (c) => ownerUser && c.createdBy === ownerUser.id,
+  ).length;
+  const totalStaff = ownerUser
+    ? users.filter((u) => u.firmOwnerId === ownerUser.id && u.role === "Staff")
+        .length
+    : 0;
+
+  return (
+    <Dialog open={!!firm} onOpenChange={() => onClose()}>
+      <DialogContent className="max-w-sm" data-ocid="super-admin.details_modal">
+        <DialogHeader>
+          <DialogTitle
+            style={{ color: theme.primary }}
+            className="flex items-center gap-2"
+          >
+            <Building2 className="w-4 h-4" />
+            Firm Details
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 mt-1">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 flex items-center gap-1.5">
+            🔒 Firm name is locked and cannot be changed after creation.
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <span className="text-xs text-gray-400 uppercase tracking-wide">
+                Firm Name
+              </span>
+              <p className="font-semibold text-gray-800 mt-0.5">
+                {firm.firmName}
+              </p>
+            </div>
+            <div>
+              <span className="text-xs text-gray-400 uppercase tracking-wide">
+                Owner Name
+              </span>
+              <p className="font-semibold text-gray-800 mt-0.5">
+                {firm.ownerName}
+              </p>
+            </div>
+            <div>
+              <span className="text-xs text-gray-400 uppercase tracking-wide">
+                Email
+              </span>
+              <p className="text-gray-700 mt-0.5 break-all">{firm.email}</p>
+            </div>
+            <div>
+              <span className="text-xs text-gray-400 uppercase tracking-wide">
+                Mobile
+              </span>
+              <p className="text-gray-700 mt-0.5">{firm.mobile}</p>
+            </div>
+            <div>
+              <span className="text-xs text-gray-400 uppercase tracking-wide">
+                Plan
+              </span>
+              <div className="mt-0.5">
+                {firm.accessType === "Full" ? (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                    Paid
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
+                    Trial
+                  </span>
+                )}
+              </div>
+            </div>
+            <div>
+              <span className="text-xs text-gray-400 uppercase tracking-wide">
+                Status
+              </span>
+              <div className="mt-0.5">
+                {firm.isActive ? (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                    Active
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                    Disabled
+                  </span>
+                )}
+              </div>
+            </div>
+            <div>
+              <span className="text-xs text-gray-400 uppercase tracking-wide">
+                Total Clients
+              </span>
+              <p className="font-bold text-gray-800 mt-0.5">{totalClients}</p>
+            </div>
+            <div>
+              <span className="text-xs text-gray-400 uppercase tracking-wide">
+                Total Staff
+              </span>
+              <p className="font-bold text-gray-800 mt-0.5">{totalStaff}</p>
+            </div>
+          </div>
+          <div>
+            <span className="text-xs text-gray-400 uppercase tracking-wide">
+              Last Login
+            </span>
+            <p className="text-sm text-gray-700 mt-0.5">
+              {formatLastLogin(firm.lastLogin)}
+            </p>
+          </div>
+          <div>
+            <span className="text-xs text-gray-400 uppercase tracking-wide">
+              Registered On
+            </span>
+            <p className="text-sm text-gray-700 mt-0.5">
+              {new Date(firm.createdAt).toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })}
+            </p>
+          </div>
+          <Button
+            onClick={onClose}
+            className="w-full text-white mt-2"
+            style={{ background: theme.primary }}
+          >
+            Close
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function SuperAdminPage() {
-  const [showForm, setShowForm] = useState(false);
+  const { theme } = useTheme();
+  const [activeTab, setActiveTab] = useState<"dashboard" | "firms">(
+    "dashboard",
+  );
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // ─── URL hash param helpers ───────────────────────────────────────────────
+
+  function getHashParams(): URLSearchParams {
+    const hash = window.location.hash; // e.g. "#/super-admin?plan=Trial&status=active"
+    const qIdx = hash.indexOf("?");
+    if (qIdx === -1) return new URLSearchParams();
+    return new URLSearchParams(hash.slice(qIdx + 1));
+  }
+
+  function setHashParam(key: string, value: string): void {
+    const hash = window.location.hash;
+    const qIdx = hash.indexOf("?");
+    const base = qIdx === -1 ? hash : hash.slice(0, qIdx);
+    const params = getHashParams();
+    if (value === "all" || value === "") {
+      params.delete(key);
+    } else {
+      params.set(key, value);
+    }
+    const qs = params.toString();
+    const newHash = qs ? `${base}?${qs}` : base;
+    window.history.replaceState(null, "", newHash);
+  }
+
+  // Filters — initialised from URL hash params so they survive refresh
+  const [planFilter, setPlanFilter] = useState<"all" | "Trial" | "Full">(() => {
+    const v = getHashParams().get("plan");
+    return v === "Trial" || v === "Full" ? v : "all";
+  });
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "disabled"
+  >(() => {
+    const v = getHashParams().get("status");
+    return v === "active" || v === "disabled" ? v : "all";
+  });
+  const [searchQuery, setSearchQuery] = useState("");
+
+  function handlePlanFilterChange(v: "all" | "Trial" | "Full") {
+    setPlanFilter(v);
+    setHashParam("plan", v);
+  }
+
+  function handleStatusFilterChange(v: "all" | "active" | "disabled") {
+    setStatusFilter(v);
+    setHashParam("status", v);
+  }
+
+  // Modals
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [viewFirm, setViewFirm] = useState<FirmAccount | null>(null);
+
+  // Add firm form
   const [form, setForm] = useState({
     ownerName: "",
     firmName: "",
@@ -39,15 +319,78 @@ export default function SuperAdminPage() {
   });
   const [formError, setFormError] = useState("");
 
+  // Subscribe to storage changes for auto-refresh
+  useEffect(() => {
+    const unsub = onStorageChange(() => setRefreshKey((k) => k + 1));
+    return unsub;
+  }, []);
+
   const firms = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     refreshKey;
     return storage.getFirmAccounts();
   }, [refreshKey]);
 
-  const refresh = () => setRefreshKey((k) => k + 1);
+  const users = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    refreshKey;
+    return storage.getUsers();
+  }, [refreshKey]);
 
-  const handleCreate = () => {
+  const clients = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+    refreshKey;
+    return storage.getClients();
+  }, [refreshKey]);
+
+  // ─── Computed stats ──────────────────────────────────────────────────────────
+
+  const stats = useMemo(() => {
+    const totalActiveUsers = users.filter(
+      (u) => u.role !== "Super Admin" && u.isActive !== false,
+    ).length;
+    return {
+      totalFirms: firms.length,
+      totalActiveUsers,
+      trialFirms: firms.filter((f) => f.accessType === "Trial").length,
+      paidFirms: firms.filter((f) => f.accessType === "Full").length,
+    };
+  }, [firms, users]);
+
+  // ─── Filtered firms ──────────────────────────────────────────────────────────
+
+  const filteredFirms = useMemo(() => {
+    return firms.filter((f) => {
+      if (planFilter !== "all" && f.accessType !== planFilter) return false;
+      if (statusFilter === "active" && !f.isActive) return false;
+      if (statusFilter === "disabled" && f.isActive) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        if (
+          !f.firmName.toLowerCase().includes(q) &&
+          !f.ownerName.toLowerCase().includes(q)
+        )
+          return false;
+      }
+      return true;
+    });
+  }, [firms, planFilter, statusFilter, searchQuery]);
+
+  // ─── Helper: get client count for a firm ─────────────────────────────────────
+
+  function getFirmClientCount(firm: FirmAccount): number {
+    const ownerUser = users.find(
+      (u) =>
+        u.email.toLowerCase() === firm.email.toLowerCase() &&
+        u.role === "Owner",
+    );
+    if (!ownerUser) return 0;
+    return clients.filter((c) => c.createdBy === ownerUser.id).length;
+  }
+
+  // ─── Handlers ────────────────────────────────────────────────────────────────
+
+  function handleCreate() {
     setFormError("");
     if (!form.ownerName.trim()) return setFormError("Owner name is required.");
     if (!form.firmName.trim()) return setFormError("Firm name is required.");
@@ -59,10 +402,14 @@ export default function SuperAdminPage() {
     if (!form.password.trim() || form.password.length < 6)
       return setFormError("Password must be at least 6 characters.");
 
-    // Check duplicate email across users
-    const users = storage.getUsers();
-    if (users.find((u) => u.email.toLowerCase() === form.email.toLowerCase())) {
+    const allUsers = storage.getUsers();
+    if (
+      allUsers.find((u) => u.email.toLowerCase() === form.email.toLowerCase())
+    ) {
       return setFormError("An account with this email already exists.");
+    }
+    if (allUsers.find((u) => u.mobile && u.mobile === form.mobile.trim())) {
+      return setFormError("An account with this mobile number already exists.");
     }
 
     const newFirm: FirmAccount = {
@@ -76,9 +423,9 @@ export default function SuperAdminPage() {
       createdAt: new Date().toISOString(),
       clientCount: 0,
     };
+    // Update local cache and localStorage immediately
     storage.saveFirmAccounts([...firms, newFirm]);
 
-    // Also create an Owner user account
     const newUser: User = {
       id: storage.uid(),
       email: form.email.trim(),
@@ -89,7 +436,13 @@ export default function SuperAdminPage() {
       isActive: true,
       accessType: form.accessType,
     };
-    storage.saveUsers([...users, newUser]);
+    // Immediately write both users and firm accounts to canister so the new
+    // firm is visible in the admin panel on all devices at next poll cycle.
+    const updatedUsers = [...allUsers, newUser];
+    saveUsersNow(updatedUsers).catch(() => {
+      storage.saveUsers(updatedUsers);
+    });
+    addAdminAuditLog(`Firm "${form.firmName.trim()}" created by Administrator`);
 
     setForm({
       ownerName: "",
@@ -99,117 +452,224 @@ export default function SuperAdminPage() {
       password: "",
       accessType: "Trial",
     });
-    setShowForm(false);
-    refresh();
-  };
+    setFormError("");
+    setShowAddForm(false);
+    toast.success("Firm account created successfully.");
+  }
 
-  const handleToggleActive = (id: string) => {
-    const updated = firms.map((f) =>
-      f.id === id ? { ...f, isActive: !f.isActive } : f,
+  function handleToggleActive(id: string) {
+    const firmAcc = firms.find((f) => f.id === id);
+    if (!firmAcc) return;
+    const nowActive = !firmAcc.isActive;
+    const updatedFirms = firms.map((f) =>
+      f.id === id ? { ...f, isActive: nowActive } : f,
     );
-    storage.saveFirmAccounts(updated);
+    storage.saveFirmAccounts(updatedFirms);
 
-    // Sync user active status
-    const firmAcc = firms.find((f) => f.id === id);
-    if (firmAcc) {
-      const users = storage.getUsers();
-      const updatedUsers = users.map((u) =>
-        u.email.toLowerCase() === firmAcc.email.toLowerCase()
-          ? { ...u, isActive: !firmAcc.isActive }
-          : u,
-      );
+    const allUsers = storage.getUsers();
+    const updatedUsers = allUsers.map((u) =>
+      u.email.toLowerCase() === firmAcc.email.toLowerCase()
+        ? { ...u, isActive: nowActive }
+        : u,
+    );
+    // Immediate canister write so the activation/deactivation is cross-device instant
+    saveUsersNow(updatedUsers).catch(() => {
       storage.saveUsers(updatedUsers);
-    }
-    refresh();
-  };
+    });
+    addAdminAuditLog(
+      `Firm "${firmAcc.firmName}" ${nowActive ? "activated" : "deactivated"} by Administrator`,
+    );
+    toast.success(
+      `Firm ${nowActive ? "activated" : "deactivated"} successfully.`,
+    );
+  }
 
-  const handleToggleAccess = (id: string) => {
-    const updated = firms.map((f) =>
-      f.id === id
-        ? { ...f, accessType: f.accessType === "Trial" ? "Full" : "Trial" }
-        : f,
-    ) as FirmAccount[];
-    storage.saveFirmAccounts(updated);
-
-    // Sync user access type
+  function handleUpgradeToPaid(id: string) {
     const firmAcc = firms.find((f) => f.id === id);
-    if (firmAcc) {
-      const users = storage.getUsers();
-      const newAccess: "Trial" | "Full" =
-        firmAcc.accessType === "Trial" ? "Full" : "Trial";
-      const updatedUsers = users.map((u) =>
-        u.email.toLowerCase() === firmAcc.email.toLowerCase()
-          ? { ...u, accessType: newAccess }
-          : u,
-      );
+    if (!firmAcc || firmAcc.accessType === "Full") return;
+    const updatedFirms = firms.map((f) =>
+      f.id === id ? { ...f, accessType: "Full" as const } : f,
+    );
+    storage.saveFirmAccounts(updatedFirms);
+
+    const allUsers = storage.getUsers();
+    const updatedUsers = allUsers.map((u) =>
+      u.email.toLowerCase() === firmAcc.email.toLowerCase()
+        ? { ...u, accessType: "Full" as const }
+        : u,
+    );
+    // Immediate canister write so the upgrade is cross-device instant
+    saveUsersNow(updatedUsers).catch(() => {
       storage.saveUsers(updatedUsers);
-    }
-    refresh();
-  };
+    });
+    addAdminAuditLog(
+      `Firm "${firmAcc.firmName}" upgraded to Paid plan by Administrator`,
+    );
+    toast.success("Firm upgraded to Paid plan.");
+  }
 
-  const handleDelete = (id: string) => {
-    if (!confirm("Delete this firm account? This cannot be undone.")) return;
-    const firmAcc = firms.find((f) => f.id === id);
-    storage.saveFirmAccounts(firms.filter((f) => f.id !== id));
-    // Remove associated user
-    if (firmAcc) {
-      const users = storage.getUsers();
-      storage.saveUsers(
-        users.filter(
-          (u) => u.email.toLowerCase() !== firmAcc.email.toLowerCase(),
-        ),
-      );
-    }
-    refresh();
-  };
+  // ─── Dashboard Tab ────────────────────────────────────────────────────────────
 
-  const stats = {
-    total: firms.length,
-    active: firms.filter((f) => f.isActive).length,
-    trial: firms.filter((f) => f.accessType === "Trial").length,
-    full: firms.filter((f) => f.accessType === "Full").length,
-  };
-
-  return (
+  const dashboardContent = (
     <div className="space-y-6">
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          {
-            label: "Total Firms",
-            value: stats.total,
-            color: "var(--theme-primary, #6B1A2B)",
-          },
-          { label: "Active", value: stats.active, color: "#16a34a" },
-          { label: "Trial", value: stats.trial, color: "#d97706" },
-          { label: "Full Access", value: stats.full, color: "#7c3aed" },
-        ].map((s) => (
-          <div
-            key={s.label}
-            className="bg-white rounded-lg p-4 shadow-sm border text-center"
-          >
-            <div className="text-3xl font-bold" style={{ color: s.color }}>
-              {s.value}
-            </div>
-            <div className="text-sm text-gray-500 mt-1">{s.label}</div>
-          </div>
-        ))}
+        <StatCard
+          label="Total Firms"
+          value={stats.totalFirms}
+          icon={<Building2 className="w-5 h-5" />}
+          color={theme.primary}
+        />
+        <StatCard
+          label="Total Active Users"
+          value={stats.totalActiveUsers}
+          icon={<Users className="w-5 h-5" />}
+          color="#16a34a"
+        />
+        <StatCard
+          label="Trial Users"
+          value={stats.trialFirms}
+          icon={<Star className="w-5 h-5" />}
+          color="#d97706"
+        />
+        <StatCard
+          label="Paid Users"
+          value={stats.paidFirms}
+          icon={<CheckCircle className="w-5 h-5" />}
+          color="#7c3aed"
+        />
       </div>
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShieldCheck
-            className="w-5 h-5"
-            style={{ color: "var(--theme-primary, #6B1A2B)" }}
-          />
-          <h2
-            className="text-lg font-semibold"
-            style={{ color: "var(--theme-primary, #6B1A2B)" }}
-          >
-            Firm Accounts
-          </h2>
+      {/* Summary section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <h3 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">
+            Plan Distribution
+          </h3>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                <span className="text-sm text-gray-600">Trial Firms</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div
+                  className="h-2 rounded-full bg-amber-200"
+                  style={{
+                    width:
+                      stats.totalFirms > 0
+                        ? `${(stats.trialFirms / stats.totalFirms) * 80}px`
+                        : "0px",
+                  }}
+                />
+                <span className="text-sm font-bold text-gray-800">
+                  {stats.trialFirms}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                <span className="text-sm text-gray-600">Paid Firms</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div
+                  className="h-2 rounded-full bg-green-200"
+                  style={{
+                    width:
+                      stats.totalFirms > 0
+                        ? `${(stats.paidFirms / stats.totalFirms) * 80}px`
+                        : "0px",
+                  }}
+                />
+                <span className="text-sm font-bold text-gray-800">
+                  {stats.paidFirms}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <h3 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">
+            Firm Status
+          </h3>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                <span className="text-sm text-gray-600">Active Firms</span>
+              </div>
+              <span className="text-sm font-bold text-gray-800">
+                {firms.filter((f) => f.isActive).length}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                <span className="text-sm text-gray-600">Disabled Firms</span>
+              </div>
+              <span className="text-sm font-bold text-gray-800">
+                {firms.filter((f) => !f.isActive).length}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ─── Firm Management Tab ───────────────────────────────────────────────────────
+
+  const firmManagementContent = (
+    <div className="space-y-4">
+      {/* Filter + Search bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by firm or owner name…"
+            className="pl-9 bg-white"
+            data-ocid="super-admin.search_input"
+          />
+        </div>
+        <Select
+          value={planFilter}
+          onValueChange={(v: "all" | "Trial" | "Full") =>
+            handlePlanFilterChange(v)
+          }
+        >
+          <SelectTrigger
+            className="w-36 bg-white"
+            data-ocid="super-admin.plan_filter"
+          >
+            <SelectValue placeholder="Plan" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Plans</SelectItem>
+            <SelectItem value="Trial">Trial</SelectItem>
+            <SelectItem value="Full">Paid</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={statusFilter}
+          onValueChange={(v: "all" | "active" | "disabled") =>
+            handleStatusFilterChange(v)
+          }
+        >
+          <SelectTrigger
+            className="w-40 bg-white"
+            data-ocid="super-admin.status_filter"
+          >
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="disabled">Disabled</SelectItem>
+          </SelectContent>
+        </Select>
         <Button
           onClick={() => {
             setForm({
@@ -221,45 +681,53 @@ export default function SuperAdminPage() {
               accessType: "Trial",
             });
             setFormError("");
-            setShowForm(true);
+            setShowAddForm(true);
           }}
-          style={{ background: "var(--theme-primary, #6B1A2B)" }}
-          className="text-white"
+          style={{ background: theme.primary }}
+          className="text-white flex-shrink-0"
           data-ocid="super-admin.primary_button"
         >
-          <Plus className="w-4 h-4 mr-1" /> Add Firm Account
+          <Plus className="w-4 h-4 mr-1" /> Add Firm
         </Button>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg shadow-sm border overflow-x-auto">
-        {firms.length === 0 ? (
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+        {filteredFirms.length === 0 ? (
           <div
             className="text-center py-16 text-gray-400"
             data-ocid="super-admin.empty_state"
           >
-            <Building2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="font-medium">No firm accounts yet.</p>
-            <p className="text-sm mt-1">
-              Click &ldquo;Add Firm Account&rdquo; to create the first one.
+            <Building2 className="w-12 h-12 mx-auto mb-3 opacity-25" />
+            <p className="font-medium">
+              {firms.length === 0
+                ? "No firm accounts yet."
+                : "No firms match your filters."}
             </p>
+            {firms.length === 0 && (
+              <p className="text-sm mt-1">
+                Click "Add Firm" to create the first one.
+              </p>
+            )}
           </div>
         ) : (
           <table className="w-full text-sm" data-ocid="super-admin.table">
-            <thead style={{ background: "var(--theme-primary, #6B1A2B)" }}>
+            <thead style={{ background: theme.primary }}>
               <tr>
                 {[
                   "Firm Name",
-                  "Owner",
+                  "Owner Name",
                   "Email",
                   "Mobile",
-                  "Access",
+                  "Plan",
                   "Status",
+                  "Clients",
+                  "Last Login",
                   "Actions",
                 ].map((h) => (
                   <th
                     key={h}
-                    className="text-left py-3 px-4 text-white font-medium"
+                    className="text-left py-3 px-4 text-white font-medium whitespace-nowrap"
                   >
                     {h}
                   </th>
@@ -267,86 +735,198 @@ export default function SuperAdminPage() {
               </tr>
             </thead>
             <tbody>
-              {firms.map((f, i) => (
-                <tr
-                  key={f.id}
-                  className="border-b last:border-0 hover:bg-gray-50"
-                  data-ocid={`super-admin.item.${i + 1}`}
-                >
-                  <td className="py-2.5 px-4 font-medium">
-                    <div className="flex items-center gap-2">
-                      <Building2
-                        className="w-4 h-4 flex-shrink-0"
-                        style={{ color: "var(--theme-primary, #6B1A2B)" }}
-                      />
-                      {f.firmName}
-                    </div>
-                  </td>
-                  <td className="py-2.5 px-4">{f.ownerName}</td>
-                  <td className="py-2.5 px-4 text-gray-500">{f.email}</td>
-                  <td className="py-2.5 px-4 text-gray-500">{f.mobile}</td>
-                  <td className="py-2.5 px-4">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleAccess(f.id)}
-                      className={`px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer transition-colors ${
-                        f.accessType === "Full"
-                          ? "bg-purple-100 text-purple-700 hover:bg-purple-200"
-                          : "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                      }`}
-                      title="Click to toggle Trial / Full"
-                    >
-                      {f.accessType}
-                    </button>
-                  </td>
-                  <td className="py-2.5 px-4">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        f.isActive
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {f.isActive ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-4">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleActive(f.id)}
-                        title={f.isActive ? "Deactivate" : "Activate"}
-                        className="p-1 rounded hover:bg-gray-100"
-                      >
-                        {f.isActive ? (
-                          <XCircle className="w-4 h-4 text-red-400" />
-                        ) : (
-                          <CheckCircle className="w-4 h-4 text-green-500" />
+              {filteredFirms.map((f, i) => {
+                const clientCount = getFirmClientCount(f);
+                return (
+                  <tr
+                    key={f.id}
+                    className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors"
+                    data-ocid={`super-admin.item.${i + 1}`}
+                  >
+                    <td className="py-3 px-4 font-medium">
+                      <div className="flex items-center gap-2">
+                        <Building2
+                          className="w-4 h-4 flex-shrink-0"
+                          style={{ color: theme.primary }}
+                        />
+                        <span className="truncate max-w-[140px]">
+                          {f.firmName}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      {f.ownerName}
+                    </td>
+                    <td className="py-3 px-4 text-gray-500 max-w-[160px] truncate">
+                      {f.email}
+                    </td>
+                    <td className="py-3 px-4 text-gray-500 whitespace-nowrap">
+                      {f.mobile}
+                    </td>
+                    <td className="py-3 px-4">
+                      {f.accessType === "Full" ? (
+                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-0 font-semibold text-xs px-2 py-0.5">
+                          Paid
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-0 font-semibold text-xs px-2 py-0.5">
+                          Trial
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {f.isActive ? (
+                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-0 font-semibold text-xs px-2 py-0.5">
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-0 font-semibold text-xs px-2 py-0.5">
+                          Disabled
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-center font-semibold text-gray-700">
+                      {clientCount}
+                    </td>
+                    <td className="py-3 px-4 text-gray-500 whitespace-nowrap text-xs">
+                      {formatLastLogin(f.lastLogin)}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-1">
+                        {/* Activate / Deactivate */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleActive(f.id)}
+                          title={
+                            f.isActive ? "Deactivate Firm" : "Activate Firm"
+                          }
+                          className={`p-1.5 rounded-lg text-xs font-medium transition-colors ${
+                            f.isActive
+                              ? "bg-red-50 text-red-600 hover:bg-red-100"
+                              : "bg-green-50 text-green-600 hover:bg-green-100"
+                          }`}
+                          data-ocid={`super-admin.toggle_button.${i + 1}`}
+                        >
+                          {f.isActive ? (
+                            <XCircle className="w-4 h-4" />
+                          ) : (
+                            <CheckCircle className="w-4 h-4" />
+                          )}
+                        </button>
+
+                        {/* Upgrade to Paid (only for Trial) */}
+                        {f.accessType === "Trial" && (
+                          <button
+                            type="button"
+                            onClick={() => handleUpgradeToPaid(f.id)}
+                            title="Upgrade to Paid"
+                            className="p-1.5 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors"
+                            data-ocid={`super-admin.upgrade_button.${i + 1}`}
+                          >
+                            <Star className="w-4 h-4" />
+                          </button>
                         )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(f.id)}
-                        title="Delete"
-                        className="p-1 rounded hover:bg-red-100 text-red-400"
-                        data-ocid={`super-admin.delete_button.${i + 1}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+
+                        {/* View Details */}
+                        <button
+                          type="button"
+                          onClick={() => setViewFirm(f)}
+                          title="View Details"
+                          className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                          data-ocid={`super-admin.view_button.${i + 1}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
       </div>
+    </div>
+  );
 
-      {/* Create Firm Dialog */}
-      <Dialog open={showForm} onOpenChange={setShowForm}>
+  // ─── Render ────────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="space-y-5">
+      {/* Page header */}
+      <div className="flex items-center gap-3">
+        <div
+          className="w-9 h-9 rounded-lg flex items-center justify-center"
+          style={{ background: theme.primary }}
+        >
+          <ShieldCheck className="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <h1 className="text-xl font-bold" style={{ color: theme.primary }}>
+            Administrator Panel
+          </h1>
+          <p className="text-xs text-gray-500">
+            Manage firms, plans, and system controls
+          </p>
+        </div>
+      </div>
+
+      {/* Tab navigation */}
+      <div className="flex border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab("dashboard")}
+          className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "dashboard"
+              ? "border-current"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+          style={
+            activeTab === "dashboard"
+              ? { color: theme.primary, borderColor: theme.primary }
+              : {}
+          }
+          data-ocid="super-admin.tab_dashboard"
+        >
+          <LayoutDashboard className="w-4 h-4" />
+          Dashboard
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("firms")}
+          className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "firms"
+              ? "border-current"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+          style={
+            activeTab === "firms"
+              ? { color: theme.primary, borderColor: theme.primary }
+              : {}
+          }
+          data-ocid="super-admin.tab_firms"
+        >
+          <Building2 className="w-4 h-4" />
+          Firm Management
+          {firms.length > 0 && (
+            <span
+              className="ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold text-white"
+              style={{ background: theme.primary }}
+            >
+              {firms.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Tab content */}
+      {activeTab === "dashboard" ? dashboardContent : firmManagementContent}
+
+      {/* Add Firm Dialog */}
+      <Dialog open={showAddForm} onOpenChange={setShowAddForm}>
         <DialogContent className="max-w-md" data-ocid="super-admin.dialog">
           <DialogHeader>
-            <DialogTitle style={{ color: "var(--theme-primary, #6B1A2B)" }}>
+            <DialogTitle style={{ color: theme.primary }}>
               Add New Firm Account
             </DialogTitle>
           </DialogHeader>
@@ -419,7 +999,7 @@ export default function SuperAdminPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Trial">Trial (5 clients)</SelectItem>
-                    <SelectItem value="Full">Full (Unlimited)</SelectItem>
+                    <SelectItem value="Full">Paid (Unlimited)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -447,7 +1027,7 @@ export default function SuperAdminPage() {
             <div className="flex gap-3">
               <Button
                 onClick={handleCreate}
-                style={{ background: "var(--theme-primary, #6B1A2B)" }}
+                style={{ background: theme.primary }}
                 className="text-white flex-1"
                 data-ocid="super-admin.submit_button"
               >
@@ -456,7 +1036,7 @@ export default function SuperAdminPage() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  setShowForm(false);
+                  setShowAddForm(false);
                   setFormError("");
                 }}
                 className="flex-1"
@@ -468,6 +1048,9 @@ export default function SuperAdminPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* View Details Modal */}
+      <FirmDetailsModal firm={viewFirm} onClose={() => setViewFirm(null)} />
     </div>
   );
 }

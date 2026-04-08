@@ -1,0 +1,16 @@
+type UserRole = 
+ variant {
+   admin;
+   guest;
+   user;
+ };
+service : {
+  _initializeAccessControl: () -> ();
+  assignCallerUserRole: (user: principal, role: UserRole) -> ();
+  getCallerUserRole: () -> (UserRole) query;
+  getGlobalAppData: () -> (text) query;
+  getGlobalUserDatabase: () -> (text) query;
+  isCallerAdmin: () -> (bool) query;
+  saveGlobalAppData: (json: text) -> ();
+  saveGlobalUserDatabase: (json: text) -> ();
+}

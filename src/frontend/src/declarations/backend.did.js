@@ -8,319 +8,41 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
-export const ActivityLogId = IDL.Nat;
-export const ActivityLog = IDL.Record({
-  'id' : ActivityLogId,
-  'userName' : IDL.Text,
-  'clientId' : IDL.Text,
-  'action' : IDL.Text,
-  'userId' : IDL.Text,
-  'role' : IDL.Text,
-  'firmId' : IDL.Text,
-  'timestamp' : IDL.Int,
-  'details' : IDL.Text,
-});
-export const DocumentInwardId = IDL.Nat;
-export const ClientId = IDL.Nat;
-export const DocumentInward = IDL.Record({
-  'id' : DocumentInwardId,
-  'clientId' : ClientId,
-  'dateOfReceipt' : IDL.Text,
-  'mode' : IDL.Text,
-  'documentStatus' : IDL.Text,
-  'firmId' : IDL.Text,
-  'remarks' : IDL.Text,
-});
-export const WorkProcessingId = IDL.Nat;
-export const WorkProcessing = IDL.Record({
-  'id' : WorkProcessingId,
-  'clientId' : ClientId,
-  'itrFormType' : IDL.Text,
-  'filingStatus' : IDL.Text,
-  'ackNumber' : IDL.Text,
-  'dueDateOfFiling' : IDL.Text,
-  'firmId' : IDL.Text,
-  'dateOfFiling' : IDL.Text,
-});
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
-export const Client = IDL.Record({
-  'id' : ClientId,
-  'pan' : IDL.Text,
-  'clientType' : IDL.Text,
-  'name' : IDL.Text,
-  'createdAt' : IDL.Int,
-  'createdBy' : IDL.Text,
-  'email' : IDL.Text,
-  'firmId' : IDL.Text,
-  'sourceOfIncome' : IDL.Text,
-  'mobile' : IDL.Text,
-});
-export const InvoiceId = IDL.Nat;
-export const Invoice = IDL.Record({
-  'id' : InvoiceId,
-  'clientId' : ClientId,
-  'generatedAt' : IDL.Int,
-  'generatedBy' : IDL.Text,
-  'paid' : IDL.Bool,
-  'invoiceNumber' : IDL.Text,
-  'firmId' : IDL.Text,
-  'amount' : IDL.Nat,
-});
-export const ExportData = IDL.Record({
-  'documents' : IDL.Vec(DocumentInward),
-  'billing' : IDL.Vec(Invoice),
-  'workProcessing' : IDL.Vec(WorkProcessing),
-  'clients' : IDL.Vec(Client),
-});
-export const OutwardDocumentId = IDL.Nat;
-export const OutwardDocument = IDL.Record({
-  'id' : OutwardDocumentId,
-  'clientId' : ClientId,
-  'readyDate' : IDL.Text,
-  'firmId' : IDL.Text,
-  'outwardStatus' : IDL.Text,
-});
-export const UserProfile = IDL.Record({
-  'name' : IDL.Text,
-  'role' : IDL.Text,
-  'email' : IDL.Text,
-  'firmId' : IDL.Text,
-});
-export const DashboardStats = IDL.Record({
-  'documentsPending' : IDL.Nat,
-  'filedITR' : IDL.Nat,
-  'totalClients' : IDL.Nat,
-  'inProgressITR' : IDL.Nat,
-  'readyForDelivery' : IDL.Nat,
-  'pendingITR' : IDL.Nat,
-});
 
 export const idlService = IDL.Service({
-  '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
-  'addActivityLog' : IDL.Func([ActivityLog], [ActivityLogId], []),
-  'addDocumentInward' : IDL.Func([DocumentInward], [DocumentInwardId], []),
-  'addWorkProcessing' : IDL.Func([WorkProcessing], [WorkProcessingId], []),
+  '_initializeAccessControl' : IDL.Func([], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
-  'assignStaffRole' : IDL.Func([IDL.Principal, IDL.Text], [], []),
-  'createClient' : IDL.Func([Client], [ClientId], []),
-  'deleteClient' : IDL.Func([ClientId], [], []),
-  'deleteDocumentInward' : IDL.Func([DocumentInwardId], [], []),
-  'disableTrialMode' : IDL.Func([], [], []),
-  'generateInvoice' : IDL.Func([Invoice], [InvoiceId], []),
-  'getActivityLogsByClient' : IDL.Func(
-      [IDL.Text],
-      [IDL.Vec(ActivityLog)],
-      ['query'],
-    ),
-  'getAllActivityLogs' : IDL.Func([], [IDL.Vec(ActivityLog)], ['query']),
-  'getAllClients' : IDL.Func([], [IDL.Vec(Client)], ['query']),
-  'getAllDataForExport' : IDL.Func([], [ExportData], ['query']),
-  'getAllInvoices' : IDL.Func([], [IDL.Vec(Invoice)], ['query']),
-  'getAllOutwardDocuments' : IDL.Func(
-      [],
-      [IDL.Vec(OutwardDocument)],
-      ['query'],
-    ),
-  'getAllWorkProcessing' : IDL.Func([], [IDL.Vec(WorkProcessing)], ['query']),
-  'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
-  'getGlobalUserDatabase' : IDL.Func([], [IDL.Text], ['query']),
-  'saveGlobalUserDatabase' : IDL.Func([IDL.Text], [], []),
   'getGlobalAppData' : IDL.Func([], [IDL.Text], ['query']),
-  'saveGlobalAppData' : IDL.Func([IDL.Text], [], []),
-  'getClient' : IDL.Func([ClientId], [Client], ['query']),
-  'getDashboardStats' : IDL.Func([], [DashboardStats], ['query']),
-  'getDocumentInwardByClient' : IDL.Func(
-      [ClientId],
-      [IDL.Vec(DocumentInward)],
-      ['query'],
-    ),
-  'getInvoiceByClient' : IDL.Func([ClientId], [IDL.Vec(Invoice)], ['query']),
-  'getOutwardStatusByClient' : IDL.Func(
-      [ClientId],
-      [IDL.Vec(OutwardDocument)],
-      ['query'],
-    ),
-  'getUserProfile' : IDL.Func(
-      [IDL.Principal],
-      [IDL.Opt(UserProfile)],
-      ['query'],
-    ),
-  'getWorkProcessingByClient' : IDL.Func(
-      [ClientId],
-      [IDL.Vec(WorkProcessing)],
-      ['query'],
-    ),
+  'getGlobalUserDatabase' : IDL.Func([], [IDL.Text], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
-  'markInvoicePaid' : IDL.Func([InvoiceId], [], []),
-  'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
-  'updateClient' : IDL.Func([Client], [], []),
-  'updateDocumentInward' : IDL.Func([DocumentInward], [], []),
-  'updateOutwardStatus' : IDL.Func([OutwardDocument], [], []),
-  'updateWorkProcessing' : IDL.Func([WorkProcessing], [], []),
+  'saveGlobalAppData' : IDL.Func([IDL.Text], [], []),
+  'saveGlobalUserDatabase' : IDL.Func([IDL.Text], [], []),
 });
 
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
-  const ActivityLogId = IDL.Nat;
-  const ActivityLog = IDL.Record({
-    'id' : ActivityLogId,
-    'userName' : IDL.Text,
-    'clientId' : IDL.Text,
-    'action' : IDL.Text,
-    'userId' : IDL.Text,
-    'role' : IDL.Text,
-    'firmId' : IDL.Text,
-    'timestamp' : IDL.Int,
-    'details' : IDL.Text,
-  });
-  const DocumentInwardId = IDL.Nat;
-  const ClientId = IDL.Nat;
-  const DocumentInward = IDL.Record({
-    'id' : DocumentInwardId,
-    'clientId' : ClientId,
-    'dateOfReceipt' : IDL.Text,
-    'mode' : IDL.Text,
-    'documentStatus' : IDL.Text,
-    'firmId' : IDL.Text,
-    'remarks' : IDL.Text,
-  });
-  const WorkProcessingId = IDL.Nat;
-  const WorkProcessing = IDL.Record({
-    'id' : WorkProcessingId,
-    'clientId' : ClientId,
-    'itrFormType' : IDL.Text,
-    'filingStatus' : IDL.Text,
-    'ackNumber' : IDL.Text,
-    'dueDateOfFiling' : IDL.Text,
-    'firmId' : IDL.Text,
-    'dateOfFiling' : IDL.Text,
-  });
   const UserRole = IDL.Variant({
     'admin' : IDL.Null,
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
-  const Client = IDL.Record({
-    'id' : ClientId,
-    'pan' : IDL.Text,
-    'clientType' : IDL.Text,
-    'name' : IDL.Text,
-    'createdAt' : IDL.Int,
-    'createdBy' : IDL.Text,
-    'email' : IDL.Text,
-    'firmId' : IDL.Text,
-    'sourceOfIncome' : IDL.Text,
-    'mobile' : IDL.Text,
-  });
-  const InvoiceId = IDL.Nat;
-  const Invoice = IDL.Record({
-    'id' : InvoiceId,
-    'clientId' : ClientId,
-    'generatedAt' : IDL.Int,
-    'generatedBy' : IDL.Text,
-    'paid' : IDL.Bool,
-    'invoiceNumber' : IDL.Text,
-    'firmId' : IDL.Text,
-    'amount' : IDL.Nat,
-  });
-  const ExportData = IDL.Record({
-    'documents' : IDL.Vec(DocumentInward),
-    'billing' : IDL.Vec(Invoice),
-    'workProcessing' : IDL.Vec(WorkProcessing),
-    'clients' : IDL.Vec(Client),
-  });
-  const OutwardDocumentId = IDL.Nat;
-  const OutwardDocument = IDL.Record({
-    'id' : OutwardDocumentId,
-    'clientId' : ClientId,
-    'readyDate' : IDL.Text,
-    'firmId' : IDL.Text,
-    'outwardStatus' : IDL.Text,
-  });
-  const UserProfile = IDL.Record({
-    'name' : IDL.Text,
-    'role' : IDL.Text,
-    'email' : IDL.Text,
-    'firmId' : IDL.Text,
-  });
-  const DashboardStats = IDL.Record({
-    'documentsPending' : IDL.Nat,
-    'filedITR' : IDL.Nat,
-    'totalClients' : IDL.Nat,
-    'inProgressITR' : IDL.Nat,
-    'readyForDelivery' : IDL.Nat,
-    'pendingITR' : IDL.Nat,
-  });
   
   return IDL.Service({
-    '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
-    'addActivityLog' : IDL.Func([ActivityLog], [ActivityLogId], []),
-    'addDocumentInward' : IDL.Func([DocumentInward], [DocumentInwardId], []),
-    'addWorkProcessing' : IDL.Func([WorkProcessing], [WorkProcessingId], []),
+    '_initializeAccessControl' : IDL.Func([], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
-    'assignStaffRole' : IDL.Func([IDL.Principal, IDL.Text], [], []),
-    'createClient' : IDL.Func([Client], [ClientId], []),
-    'deleteClient' : IDL.Func([ClientId], [], []),
-    'deleteDocumentInward' : IDL.Func([DocumentInwardId], [], []),
-    'disableTrialMode' : IDL.Func([], [], []),
-    'generateInvoice' : IDL.Func([Invoice], [InvoiceId], []),
-    'getActivityLogsByClient' : IDL.Func(
-        [IDL.Text],
-        [IDL.Vec(ActivityLog)],
-        ['query'],
-      ),
-    'getAllActivityLogs' : IDL.Func([], [IDL.Vec(ActivityLog)], ['query']),
-    'getAllClients' : IDL.Func([], [IDL.Vec(Client)], ['query']),
-    'getAllDataForExport' : IDL.Func([], [ExportData], ['query']),
-    'getAllInvoices' : IDL.Func([], [IDL.Vec(Invoice)], ['query']),
-    'getAllOutwardDocuments' : IDL.Func(
-        [],
-        [IDL.Vec(OutwardDocument)],
-        ['query'],
-      ),
-    'getAllWorkProcessing' : IDL.Func([], [IDL.Vec(WorkProcessing)], ['query']),
-    'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
-    'getGlobalUserDatabase' : IDL.Func([], [IDL.Text], ['query']),
-    'saveGlobalUserDatabase' : IDL.Func([IDL.Text], [], []),
     'getGlobalAppData' : IDL.Func([], [IDL.Text], ['query']),
-    'saveGlobalAppData' : IDL.Func([IDL.Text], [], []),
-    'getClient' : IDL.Func([ClientId], [Client], ['query']),
-    'getDashboardStats' : IDL.Func([], [DashboardStats], ['query']),
-    'getDocumentInwardByClient' : IDL.Func(
-        [ClientId],
-        [IDL.Vec(DocumentInward)],
-        ['query'],
-      ),
-    'getInvoiceByClient' : IDL.Func([ClientId], [IDL.Vec(Invoice)], ['query']),
-    'getOutwardStatusByClient' : IDL.Func(
-        [ClientId],
-        [IDL.Vec(OutwardDocument)],
-        ['query'],
-      ),
-    'getUserProfile' : IDL.Func(
-        [IDL.Principal],
-        [IDL.Opt(UserProfile)],
-        ['query'],
-      ),
-    'getWorkProcessingByClient' : IDL.Func(
-        [ClientId],
-        [IDL.Vec(WorkProcessing)],
-        ['query'],
-      ),
+    'getGlobalUserDatabase' : IDL.Func([], [IDL.Text], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
-    'markInvoicePaid' : IDL.Func([InvoiceId], [], []),
-    'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
-    'updateClient' : IDL.Func([Client], [], []),
-    'updateDocumentInward' : IDL.Func([DocumentInward], [], []),
-    'updateOutwardStatus' : IDL.Func([OutwardDocument], [], []),
-    'updateWorkProcessing' : IDL.Func([WorkProcessing], [], []),
+    'saveGlobalAppData' : IDL.Func([IDL.Text], [], []),
+    'saveGlobalUserDatabase' : IDL.Func([IDL.Text], [], []),
   });
 };
 

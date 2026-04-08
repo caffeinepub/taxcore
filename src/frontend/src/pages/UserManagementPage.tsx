@@ -9,11 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Crown, Eye, EyeOff, Plus, Trash2, UserCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import {
-  onStorageChange,
-  silentRefreshFromCanister,
-  storage,
-} from "../data/storage";
+import { onStorageChange, saveUsersNow, storage } from "../data/storage";
 import type { User } from "../types";
 
 function isValidEmail(v: string): boolean {
@@ -61,7 +57,7 @@ export default function UserManagementPage() {
     return unsub;
   }, []);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     setFormError("");
     if (!form.name.trim()) return setFormError("Name is required.");
     if (!form.email.trim() || !isValidEmail(form.email))
@@ -87,7 +83,15 @@ export default function UserManagementPage() {
       isActive: true,
       firmOwnerId: currentUser?.id, // links staff to this owner
     };
-    storage.saveUsers([...allUsers, newUser]);
+    const updatedUsers = [...allUsers, newUser];
+    // Immediately write to canister (awaited) so other devices see the new staff
+    // account within the next 5-second poll cycle without needing manual refresh.
+    try {
+      await saveUsersNow(updatedUsers);
+    } catch {
+      // Canister write failed — local cache already updated, bgSync will retry
+      storage.saveUsers(updatedUsers);
+    }
     // Audit log for staff creation
     storage.addAuditLog({
       id: storage.uid(),
@@ -102,8 +106,6 @@ export default function UserManagementPage() {
       newValue: `${newUser.name} (${newUser.email})`,
       timestamp: new Date().toISOString(),
     });
-    // Immediately push to canister so other devices see the new staff account right away
-    silentRefreshFromCanister().catch(() => {});
     setForm({
       email: "",
       password: "",
@@ -115,7 +117,7 @@ export default function UserManagementPage() {
     setRefreshKey((k) => k + 1);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (currentUser?.id === id)
       return alert("Cannot delete the currently logged-in user.");
     const target = allUsers.find((u) => u.id === id);
@@ -125,7 +127,13 @@ export default function UserManagementPage() {
       return alert("Cannot delete the Administrator account.");
     if (!confirm("Delete this staff user?")) return;
     const deletedUser = allUsers.find((u) => u.id === id);
-    storage.saveUsers(allUsers.filter((u) => u.id !== id));
+    const updatedUsers = allUsers.filter((u) => u.id !== id);
+    // Immediately write to canister (awaited) so deletion is visible cross-device
+    try {
+      await saveUsersNow(updatedUsers);
+    } catch {
+      storage.saveUsers(updatedUsers);
+    }
     if (deletedUser) {
       storage.addAuditLog({
         id: storage.uid(),
@@ -141,8 +149,6 @@ export default function UserManagementPage() {
         timestamp: new Date().toISOString(),
       });
     }
-    // Immediately push to canister
-    silentRefreshFromCanister().catch(() => {});
     setRefreshKey((k) => k + 1);
   };
 

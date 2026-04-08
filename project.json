@@ -1,0 +1,23 @@
+{
+  "overview": "TaxCore is a multi-tenant ITR workflow and status tracking system for CA firms and tax professionals. It provides client management, document tracking, work processing, billing, alerts, and role-based access with a powerful Super Admin control panel for firm governance.",
+  "features": [
+    "Super Admin control panel with firm management and trial/paid controls",
+    "Multi-tenant firm management with Trial/Paid plan enforcement",
+    "Client workflow tracking with ITR filing date and status automation",
+    "Real-time sync across all devices via ICP canister backend",
+    "Bell icon deadline alerts with urgency color coding",
+    "Role-based access: Administrator, Owner, Staff",
+    "Audit log with full activity tracking",
+    "One-click Excel export for all modules"
+  ],
+  "category": "productivity",
+  "tags": [
+    "tax",
+    "itr",
+    "workflow",
+    "ca-firms",
+    "multi-tenant",
+    "saas"
+  ],
+  "last_updated": "2026-04-08T05:33:28.395Z"
+}
