@@ -1,9 +1,10 @@
-import { Bell, CheckCircle, ShieldAlert, X } from "lucide-react";
+import { Bell, CheckCircle, ShieldAlert, Star, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   getDeadlineAlertClients,
   getEVerificationAlerts,
   onStorageChange,
+  storage,
 } from "../data/storage";
 import type { Page, User } from "../types";
 
@@ -19,27 +20,80 @@ const WORKFLOW_STAGE_LABELS: Record<string, string> = {
   Completed: "Completed",
 };
 
+// ─── Trial upgrade alert type ─────────────────────────────────────────────────
+
+interface TrialUpgradeAlert {
+  firmId: string;
+  firmName: string;
+  ownerName: string;
+  clientCount: number;
+}
+
+function getTrialUpgradeAlerts(): TrialUpgradeAlert[] {
+  const firms = storage.getFirmAccounts();
+  const users = storage.getUsers();
+  const clients = storage.getClients();
+  const result: TrialUpgradeAlert[] = [];
+
+  for (const firm of firms) {
+    if (firm.accessType !== "Trial") continue;
+    if (!firm.isActive) continue;
+    const ownerUser = users.find(
+      (u) =>
+        u.email.toLowerCase() === firm.email.toLowerCase() &&
+        u.role === "Owner",
+    );
+    const clientCount = ownerUser
+      ? clients.filter((c) => c.createdBy === ownerUser.id).length
+      : 0;
+    // Show alert when firm has reached or exceeded the 5-client trial limit
+    if (clientCount >= 5) {
+      result.push({
+        firmId: firm.id,
+        firmName: firm.firmName,
+        ownerName: firm.ownerName,
+        clientCount,
+      });
+    }
+  }
+
+  return result.sort((a, b) => b.clientCount - a.clientCount);
+}
+
 export default function DeadlineBell({ user, onNavigate }: DeadlineBellProps) {
+  const isSuperAdmin = user.role === "Super Admin";
   const [isOpen, setIsOpen] = useState(false);
+
+  // Super Admin: trial upgrade alerts
+  const [trialAlerts, setTrialAlerts] = useState<TrialUpgradeAlert[]>(() =>
+    isSuperAdmin ? getTrialUpgradeAlerts() : [],
+  );
+
+  // Owner/Staff: deadline alerts
   const [alerts, setAlerts] = useState(() =>
-    getDeadlineAlertClients(user.id, user.role),
+    isSuperAdmin ? [] : getDeadlineAlertClients(user.id, user.role),
   );
   const [eVerifAlerts, setEVerifAlerts] = useState(() =>
-    getEVerificationAlerts(),
+    isSuperAdmin ? [] : getEVerificationAlerts(),
   );
+
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   // Refresh alerts on any storage change
   useEffect(() => {
     const refresh = () => {
-      setAlerts(getDeadlineAlertClients(user.id, user.role));
-      setEVerifAlerts(getEVerificationAlerts());
+      if (isSuperAdmin) {
+        setTrialAlerts(getTrialUpgradeAlerts());
+      } else {
+        setAlerts(getDeadlineAlertClients(user.id, user.role));
+        setEVerifAlerts(getEVerificationAlerts());
+      }
     };
     refresh();
     const unsub = onStorageChange(refresh);
     return unsub;
-  }, [user.id, user.role]);
+  }, [user.id, user.role, isSuperAdmin]);
 
   // Close on outside click
   useEffect(() => {
@@ -56,6 +110,135 @@ export default function DeadlineBell({ user, onNavigate }: DeadlineBellProps) {
     document.addEventListener("mousedown", handleMouseDown);
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, []);
+
+  // ── Super Admin bell ──────────────────────────────────────────────────────────
+  if (isSuperAdmin) {
+    const count = trialAlerts.length;
+    const hasAlerts = count > 0;
+
+    return (
+      <div className="relative">
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={() => setIsOpen((v) => !v)}
+          className="relative p-2 rounded-full transition-all duration-200 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-1"
+          aria-label={`Trial upgrade alerts${hasAlerts ? ` - ${count} firms at limit` : ""}`}
+          data-ocid="header.bell.button"
+        >
+          <Bell
+            className={`w-5 h-5 transition-all duration-200 ${hasAlerts ? "text-amber-600" : "text-gray-400"}`}
+          />
+          {hasAlerts && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-[1.1rem] h-[1.1rem] rounded-full text-[10px] font-bold flex items-center justify-center px-0.5 leading-none bg-amber-500 text-white animate-pulse">
+              {count > 99 ? "99+" : count}
+            </span>
+          )}
+        </button>
+
+        {isOpen && (
+          <div
+            ref={dropdownRef}
+            className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden"
+            style={{
+              zIndex: 50,
+              animation: "dropdownOpen 0.18s ease-out forwards",
+            }}
+            data-ocid="header.bell.popover"
+          >
+            <style>{`
+              @keyframes dropdownOpen {
+                from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+                to { opacity: 1; transform: scale(1) translateY(0); }
+              }
+            `}</style>
+
+            {/* Header */}
+            <div
+              className="flex items-center justify-between px-4 py-3 border-b"
+              style={{ background: "#7c5a00" }}
+            >
+              <div className="flex items-center gap-2">
+                <Star className="w-4 h-4 text-amber-300" />
+                <span className="text-white font-semibold text-sm">
+                  Trial Firms at Client Limit
+                </span>
+                {hasAlerts && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
+                    {count}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="text-white/60 hover:text-white transition-colors p-0.5 rounded"
+                aria-label="Close"
+                data-ocid="header.bell.close_button"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto">
+              {trialAlerts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+                  <CheckCircle className="w-10 h-10 text-green-500 mb-2" />
+                  <p className="text-gray-600 font-medium text-sm">
+                    No trial firms at the limit
+                  </p>
+                  <p className="text-gray-400 text-xs mt-1">
+                    All trial firms have room to add more clients
+                  </p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-50">
+                  {trialAlerts.map((alert) => (
+                    <li
+                      key={alert.firmId}
+                      className="px-4 py-3 hover:bg-amber-50 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-800 text-sm truncate">
+                            {alert.firmName}
+                          </p>
+                          <p className="text-gray-500 text-xs mt-0.5">
+                            {alert.ownerName}
+                          </p>
+                        </div>
+                        <div className="flex-shrink-0 text-right">
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                            {alert.clientCount} clients
+                          </span>
+                          <p className="text-[10px] text-amber-600 mt-0.5 font-medium">
+                            Upgrade needed
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="border-t px-4 py-2.5 bg-amber-50">
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="w-full text-center text-sm font-medium text-amber-800 transition-colors"
+                data-ocid="header.bell.clients_link"
+              >
+                Manage Firm Plans →
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Owner / Staff bell (existing behavior) ────────────────────────────────────
 
   const totalCount =
     alerts.length + eVerifAlerts.filter((a) => a.urgency === "high").length;

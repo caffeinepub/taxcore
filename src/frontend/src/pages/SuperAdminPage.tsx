@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ArrowDownCircle,
   Building2,
   CheckCircle,
   Eye,
@@ -24,6 +25,7 @@ import {
   Search,
   ShieldCheck,
   Star,
+  UserCircle,
   Users,
   XCircle,
 } from "lucide-react";
@@ -32,6 +34,8 @@ import { toast } from "sonner";
 import { useTheme } from "../contexts/ThemeContext";
 import { onStorageChange, saveUsersNow, storage } from "../data/storage";
 import type { AuditLogEntry, FirmAccount, User } from "../types";
+
+const ADMIN_PROFILE_COMPLETE_KEY = "taxcore_admin_profile_complete";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -258,7 +262,8 @@ export default function SuperAdminPage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   // ─── Profile completeness state ───────────────────────────────────────────
-  // Show a profile setup banner if the admin still has the default name "Admin".
+  // Show a full-screen profile setup if the admin still has the default name "Admin"
+  // AND the localStorage flag has not been set to "true" yet.
   // Re-derive from refreshKey so it stays in sync with background canister syncs.
   const adminUser: User | null = useMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
@@ -266,13 +271,48 @@ export default function SuperAdminPage() {
     return storage.getUsers().find((u) => u.role === "Super Admin") ?? null;
   }, [refreshKey]);
 
-  const isProfileIncomplete =
-    !adminUser?.name || adminUser.name.trim() === "Admin";
-  const [showProfileBanner, setShowProfileBanner] = useState(true);
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [profileName, setProfileName] = useState(adminUser?.name ?? "");
+  function isAdminProfileComplete(): boolean {
+    // If localStorage flag is set, skip setup screen
+    if (localStorage.getItem(ADMIN_PROFILE_COMPLETE_KEY) === "true")
+      return true;
+    // If the admin has a real name (not default "Admin"), mark complete and skip
+    if (
+      adminUser?.name &&
+      adminUser.name.trim() !== "" &&
+      adminUser.name.trim() !== "Admin"
+    ) {
+      localStorage.setItem(ADMIN_PROFILE_COMPLETE_KEY, "true");
+      return true;
+    }
+    return false;
+  }
+
+  const [profileSetupDone, setProfileSetupDone] = useState(() =>
+    isAdminProfileComplete(),
+  );
+  const [profileName, setProfileName] = useState(
+    adminUser?.name && adminUser.name !== "Admin" ? adminUser.name : "",
+  );
   const [profileNameError, setProfileNameError] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // Re-check profile completeness when adminUser changes (e.g. after canister sync)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — only check when adminUser identity changes
+  useEffect(() => {
+    if (!profileSetupDone) {
+      const done =
+        localStorage.getItem(ADMIN_PROFILE_COMPLETE_KEY) === "true" ||
+        !!(
+          adminUser?.name &&
+          adminUser.name.trim() !== "" &&
+          adminUser.name.trim() !== "Admin"
+        );
+      if (done) {
+        localStorage.setItem(ADMIN_PROFILE_COMPLETE_KEY, "true");
+        setProfileSetupDone(true);
+      }
+    }
+  }, [adminUser, profileSetupDone]);
 
   // ─── URL hash param helpers ───────────────────────────────────────────────
 
@@ -502,12 +542,17 @@ export default function SuperAdminPage() {
   }
 
   async function handleSaveProfile() {
-    if (!profileName.trim()) {
+    const trimmedName = profileName.trim();
+    if (!trimmedName) {
       setProfileNameError("Name is required.");
       return;
     }
-    if (profileName.trim().length < 2) {
+    if (trimmedName.length < 2) {
       setProfileNameError("Name must be at least 2 characters.");
+      return;
+    }
+    if (trimmedName === "Admin") {
+      setProfileNameError("Please enter your real name, not 'Admin'.");
       return;
     }
     setSavingProfile(true);
@@ -515,16 +560,18 @@ export default function SuperAdminPage() {
     try {
       const allUsers = storage.getUsers();
       const updatedUsers = allUsers.map((u) =>
-        u.role === "Super Admin" ? { ...u, name: profileName.trim() } : u,
+        u.role === "Super Admin" ? { ...u, name: trimmedName } : u,
       );
       await saveUsersNow(updatedUsers).catch(() =>
         storage.saveUsers(updatedUsers),
       );
+      // Mark profile as complete in localStorage so this device skips setup next login
+      localStorage.setItem(ADMIN_PROFILE_COMPLETE_KEY, "true");
       // Refresh key triggers adminUser useMemo to re-derive the updated user
       setRefreshKey((k) => k + 1);
-      setEditingProfile(false);
+      setProfileSetupDone(true);
       addAdminAuditLog("Administrator updated profile name");
-      toast.success("Profile updated successfully.");
+      toast.success("Profile saved. Welcome to the Administrator Panel!");
     } finally {
       setSavingProfile(false);
     }
@@ -552,6 +599,30 @@ export default function SuperAdminPage() {
       `Firm "${firmAcc.firmName}" upgraded to Paid plan by Administrator`,
     );
     toast.success("Firm upgraded to Paid plan.");
+  }
+
+  function handleDowngradeToTrial(id: string) {
+    const firmAcc = firms.find((f) => f.id === id);
+    if (!firmAcc || firmAcc.accessType === "Trial") return;
+    const updatedFirms = firms.map((f) =>
+      f.id === id ? { ...f, accessType: "Trial" as const } : f,
+    );
+    storage.saveFirmAccounts(updatedFirms);
+
+    const allUsers = storage.getUsers();
+    const updatedUsers = allUsers.map((u) =>
+      u.email.toLowerCase() === firmAcc.email.toLowerCase()
+        ? { ...u, accessType: "Trial" as const }
+        : u,
+    );
+    // Immediate canister write so the downgrade is cross-device instant
+    saveUsersNow(updatedUsers).catch(() => {
+      storage.saveUsers(updatedUsers);
+    });
+    addAdminAuditLog(
+      `Firm "${firmAcc.firmName}" downgraded to Trial plan by Administrator`,
+    );
+    toast.success("Firm downgraded to Trial plan. 5-client limit restored.");
   }
 
   // ─── Dashboard Tab ────────────────────────────────────────────────────────────
@@ -860,8 +931,8 @@ export default function SuperAdminPage() {
                           )}
                         </button>
 
-                        {/* Upgrade to Paid (only for Trial) */}
-                        {f.accessType === "Trial" && (
+                        {/* Plan toggle — always visible, bi-directional */}
+                        {f.accessType === "Trial" ? (
                           <button
                             type="button"
                             onClick={() => handleUpgradeToPaid(f.id)}
@@ -870,6 +941,16 @@ export default function SuperAdminPage() {
                             data-ocid={`super-admin.upgrade_button.${i + 1}`}
                           >
                             <Star className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleDowngradeToTrial(f.id)}
+                            title="Downgrade to Trial"
+                            className="p-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors"
+                            data-ocid={`super-admin.downgrade_button.${i + 1}`}
+                          >
+                            <ArrowDownCircle className="w-4 h-4" />
                           </button>
                         )}
 
@@ -897,6 +978,73 @@ export default function SuperAdminPage() {
 
   // ─── Render ────────────────────────────────────────────────────────────────────
 
+  // ── Profile setup screen (enforced — cannot be dismissed until name is set) ──
+  if (!profileSetupDone) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div
+          className="w-full max-w-sm rounded-2xl border shadow-lg p-8"
+          style={{
+            background: "#FFFDF7",
+            borderColor: "rgba(201,168,76,0.35)",
+          }}
+          data-ocid="super-admin.profile_setup_screen"
+        >
+          <div className="flex flex-col items-center mb-6">
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center mb-3"
+              style={{ background: `${theme.primary}18` }}
+            >
+              <UserCircle
+                className="w-8 h-8"
+                style={{ color: theme.primary }}
+              />
+            </div>
+            <h2 className="text-xl font-bold" style={{ color: theme.primary }}>
+              Welcome, Administrator!
+            </h2>
+            <p className="text-sm text-gray-500 mt-1 text-center">
+              Before you access the panel, please set your display name.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="admin-name-input">Your Full Name *</Label>
+              <Input
+                id="admin-name-input"
+                data-ocid="super-admin.profile_name_input"
+                value={profileName}
+                onChange={(e) => {
+                  setProfileName(e.target.value);
+                  if (profileNameError) setProfileNameError("");
+                }}
+                placeholder="e.g. Ramesh Sharma"
+                className="mt-1"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveProfile();
+                }}
+              />
+              {profileNameError && (
+                <p className="text-xs text-red-600 mt-1">{profileNameError}</p>
+              )}
+            </div>
+            <Button
+              data-ocid="super-admin.profile_save_button"
+              className="w-full text-white"
+              style={{ background: theme.primary }}
+              onClick={handleSaveProfile}
+              disabled={savingProfile}
+            >
+              {savingProfile ? "Saving…" : "Save & Continue to Admin Panel"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       {/* Page header */}
@@ -916,96 +1064,6 @@ export default function SuperAdminPage() {
           </p>
         </div>
       </div>
-
-      {/* ── Profile completeness banner ── */}
-      {isProfileIncomplete && showProfileBanner && (
-        <div
-          data-ocid="super-admin.profile_banner"
-          className="rounded-xl border px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3"
-          style={{
-            background: "rgba(201,168,76,0.08)",
-            borderColor: "rgba(201,168,76,0.4)",
-          }}
-        >
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="text-lg flex-shrink-0">👤</span>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold" style={{ color: "#7a4f03" }}>
-                Complete your Administrator profile
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Set your display name so the system shows your identity
-                correctly.
-              </p>
-            </div>
-          </div>
-          {editingProfile ? (
-            <div className="flex flex-col gap-1.5 sm:w-64 flex-shrink-0">
-              <div className="flex gap-2">
-                <Input
-                  data-ocid="super-admin.profile_name_input"
-                  value={profileName}
-                  onChange={(e) => {
-                    setProfileName(e.target.value);
-                    if (profileNameError) setProfileNameError("");
-                  }}
-                  placeholder="Your full name"
-                  className="h-8 text-sm"
-                  autoFocus
-                />
-                <Button
-                  data-ocid="super-admin.profile_save_button"
-                  size="sm"
-                  className="text-white h-8 px-3 flex-shrink-0"
-                  style={{ background: theme.primary }}
-                  onClick={handleSaveProfile}
-                  disabled={savingProfile}
-                >
-                  {savingProfile ? "…" : "Save"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 px-2 flex-shrink-0"
-                  onClick={() => {
-                    setEditingProfile(false);
-                    setProfileName(adminUser?.name ?? "");
-                    setProfileNameError("");
-                  }}
-                >
-                  ✕
-                </Button>
-              </div>
-              {profileNameError && (
-                <p className="text-xs text-red-600">{profileNameError}</p>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Button
-                data-ocid="super-admin.profile_edit_button"
-                size="sm"
-                className="text-white h-8"
-                style={{ background: theme.primary }}
-                onClick={() => {
-                  setProfileName(adminUser?.name ?? "");
-                  setEditingProfile(true);
-                }}
-              >
-                Update Profile
-              </Button>
-              <button
-                type="button"
-                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-                aria-label="Dismiss profile banner"
-                onClick={() => setShowProfileBanner(false)}
-              >
-                ×
-              </button>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Tab navigation */}
       <div className="flex border-b border-gray-200">
